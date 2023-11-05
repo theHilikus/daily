@@ -24,7 +24,7 @@ func NewEvent(title *ClickableText, titleButtons []*widget.Button, detail fyne.C
 	}
 
 	detail.Hide()
-	rootContainer := container.NewVBox(titleBox, detail)
+	rootContainer := container.NewVBox(titleBox, detail, widget.NewSeparator())
 	result := &Event{
 		Title:        title,
 		TitleButtons: titleButtons,
