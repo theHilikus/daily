@@ -34,7 +34,7 @@ func NewEvent(title *ClickableText, titleButtons []*widget.Button, detail fyne.C
 	}
 	result.ExtendBaseWidget(result)
 
-	title.TapHandler = func(pe *fyne.PointEvent) {
+	title.OnTapped = func(pe *fyne.PointEvent) {
 		if result.open {
 			result.Close()
 		} else {

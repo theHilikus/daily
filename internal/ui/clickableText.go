@@ -18,7 +18,7 @@ type ClickableText struct {
 	background    *canvas.Rectangle
 	rootContainer *fyne.Container
 
-	TapHandler func(*fyne.PointEvent)
+	OnTapped func(*fyne.PointEvent)
 }
 
 func NewClickableText(text string, style fyne.TextStyle, colour color.Color) *ClickableText {
@@ -37,13 +37,15 @@ func NewClickableText(text string, style fyne.TextStyle, colour color.Color) *Cl
 	}
 	result.ExtendBaseWidget(result)
 	result.rootContainer = container.NewStack(result.background, result.text)
+	result.tapAnim = newTapAnimation(result.background, result)
+	result.tapAnim.Curve = fyne.AnimationEaseOut
 
 	return result
 }
 
 func (clickable *ClickableText) Tapped(event *fyne.PointEvent) {
-	if clickable.TapHandler != nil {
-		clickable.TapHandler(event)
+	if clickable.OnTapped != nil {
+		clickable.OnTapped(event)
 	}
 }
 

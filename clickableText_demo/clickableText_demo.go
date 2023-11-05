@@ -15,7 +15,7 @@ func main() {
 	window.Resize(fyne.NewSize(400, 600))
 
 	sample := ui.NewClickableText("Test", fyne.TextStyle{Bold: true}, color.Black)
-	sample.TapHandler = func(pe *fyne.PointEvent) {
+	sample.OnTapped = func(pe *fyne.PointEvent) {
 		fmt.Println("Tapppped")
 	}
 	window.SetContent(sample)
