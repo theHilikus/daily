@@ -17,6 +17,7 @@ type ClickableText struct {
 	text          *canvas.Text
 	background    *canvas.Rectangle
 	rootContainer *fyne.Container
+	tapAnim       *fyne.Animation
 
 	OnTapped func(*fyne.PointEvent)
 }
@@ -44,6 +45,7 @@ func NewClickableText(text string, style fyne.TextStyle, colour color.Color) *Cl
 }
 
 func (clickable *ClickableText) Tapped(event *fyne.PointEvent) {
+	clickable.tapAnimation()
 	if clickable.OnTapped != nil {
 		clickable.OnTapped(event)
 	}
@@ -73,4 +75,30 @@ func (clickable *ClickableText) changeBackground(colour color.Color) {
 
 	clickable.background.CornerRadius = theme.InputRadiusSize()
 	clickable.background.Refresh()
+}
+
+func newTapAnimation(bg *canvas.Rectangle, w fyne.Widget) *fyne.Animation {
+	return fyne.NewAnimation(canvas.DurationStandard, func(done float32) {
+		mid := w.Size().Width / 2
+		size := mid * done
+		bg.Resize(fyne.NewSize(size*2, w.Size().Height))
+		bg.Move(fyne.NewPos(mid-size, 0))
+
+		r, g, bb, a := theme.PressedColor().RGBA()
+		aa := uint8(a)
+		fade := aa - uint8(float32(aa)*done)
+		bg.FillColor = &color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(bb), A: fade}
+		canvas.Refresh(bg)
+	})
+}
+
+func (clickable *ClickableText) tapAnimation() {
+	if clickable.tapAnim == nil {
+		return
+	}
+	clickable.tapAnim.Stop()
+
+	if fyne.CurrentApp().Settings().ShowAnimations() {
+		clickable.tapAnim.Start()
+	}
 }
