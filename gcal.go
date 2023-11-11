@@ -20,10 +20,10 @@ const (
 )
 
 type googleCalendar struct {
-	service      *calendar.Service
-	eventsBuffer []event
+	service          *calendar.Service
+	eventsBuffer     []event
 	requestStartDate time.Time
-	requestEndDate time.Time
+	requestEndDate   time.Time
 }
 
 func newGoogleCalendar() (*googleCalendar, error) {
@@ -91,9 +91,8 @@ func (gcal googleCalendar) getEvents(day time.Time) ([]event, error) {
 	var result []event
 	for _, event := range gcal.eventsBuffer {
 		eventYear, eventMonth, eventDay := event.start.Date()
-		
 
-		if year, month, day2 := day.Date(); year == eventYear && month == eventMonth && day2 == eventDay{
+		if year, month, day2 := day.Date(); year == eventYear && month == eventMonth && day2 == eventDay {
 			result = append(result, event)
 		}
 	}
@@ -121,16 +120,24 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 			if err != nil {
 				return err
 			}
-			
+
 			eventEnd, err := time.Parse(time.RFC3339, item.End.DateTime)
 			if err != nil {
 				return err
 			}
-			allEvents = append(allEvents, event{
-				title: item.Summary,
-				start: eventStart,
-				end: eventEnd,
-			})
+
+			newEvent := event{
+				title:   item.Summary,
+				start:   eventStart,
+				end:     eventEnd,
+				details: item.Description,
+			}
+			if item.HangoutLink != "" {
+				newEvent.location = item.HangoutLink
+			} else {
+				newEvent.location = item.Location
+			}
+			allEvents = append(allEvents, newEvent)
 		}
 	}
 	gcal.eventsBuffer = allEvents
