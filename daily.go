@@ -41,6 +41,21 @@ func main() {
 
 	parseArgs()
 
+	window := buildUi()
+
+	preferences = dailyApp.Preferences()
+	calendarToken := preferences.String("calendar-token")
+	if calendarToken == "" {
+		slog.Info("Calendar config not found. Starting in Settings UI")
+		showSettings(dailyApp)
+	} else {
+		refresh()
+	}
+
+	window.ShowAndRun()
+}
+
+func buildUi() fyne.Window {
 	displayDay = time.Now()
 
 	dailyApp = app.NewWithID("com.github.theHilikus.daily")
@@ -66,16 +81,7 @@ func main() {
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
 	window.SetContent(content)
 
-	preferences = dailyApp.Preferences()
-	calendarToken := preferences.String("calendar-token")
-	if calendarToken == "" {
-		slog.Info("Calendar config not found. Starting in Settings UI")
-		showSettings(dailyApp)
-	} else {
-		refresh()
-	}
-
-	window.ShowAndRun()
+	return window
 }
 
 func parseArgs() {
