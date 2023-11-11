@@ -90,9 +90,7 @@ func (gcal googleCalendar) getEvents(day time.Time) ([]event, error) {
 
 	var result []event
 	for _, event := range gcal.eventsBuffer {
-		eventYear, eventMonth, eventDay := event.start.Date()
-
-		if year, month, day2 := day.Date(); year == eventYear && month == eventMonth && day2 == eventDay {
+		if isOnSameDay(day, event.start) {
 			result = append(result, event)
 		}
 	}
