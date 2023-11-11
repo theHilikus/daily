@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -23,6 +25,7 @@ var (
 	testCalendar *bool
 	eventSource  EventSource
 	preferences  fyne.Preferences
+	dailyApp     fyne.App
 )
 
 const dayFormat = "Mon, Jan 02"
@@ -40,7 +43,8 @@ func main() {
 
 	displayDay = time.Now()
 
-	dailyApp := app.NewWithID("com.github.theHilikus.daily")
+	dailyApp = app.NewWithID("com.github.theHilikus.daily")
+
 	window := dailyApp.NewWindow("Daily")
 	window.Resize(fyne.NewSize(400, 600))
 
@@ -118,7 +122,18 @@ func refresh() {
 			details := widget.TextSegment{
 				Text: event.details,
 			}
-			eventsList.Add(ui.NewEvent(title, []*widget.Button{}, widget.NewRichText(&details)))
+			var buttons []*widget.Button
+			if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
+				locationUrl, err := url.Parse(event.location)
+				if err == nil {
+					meetingButton := widget.NewButton("Meeting", func() { dailyApp.OpenURL(locationUrl) })
+					if event.isFinished() {
+						meetingButton.Disable()
+					}
+					buttons = append(buttons, meetingButton)
+				}
+			}
+			eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
 		}
 	}
 }
@@ -160,8 +175,8 @@ func getEvents() ([]event, error) {
 		var err error
 		eventSource, err = newGoogleCalendar()
 		if err != nil {
-            return nil, err
-        }
+			return nil, err
+		}
 	}
 
 	return eventSource.getEvents(displayDay)
