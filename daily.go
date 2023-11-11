@@ -93,7 +93,7 @@ func parseArgs() {
 
 func refresh() {
 	slog.Info("Refreshing data around date " + displayDay.Format("2006-01-02"))
-
+	eventsList.RemoveAll()
 	events, err := getEvents()
 	if err != nil {
 		slog.Error("Could not retrieve calendar events")
@@ -155,6 +155,7 @@ func changeDay(offset int, dayLabel *widget.Label) {
 	displayDay = displayDay.AddDate(0, 0, offset)
 	dayLabel.SetText(displayDay.Format(dayFormat))
 	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
+	refresh()
 }
 
 func isOnSameDay(one time.Time, other time.Time) bool {
