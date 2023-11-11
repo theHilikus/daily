@@ -18,12 +18,18 @@ import (
 )
 
 var (
-	currentDay   = time.Now()
+	displayDay   time.Time
 	eventsList   *fyne.Container
 	testCalendar *bool
+	eventSource  EventSource
+	preferences  fyne.Preferences
 )
 
 const dayFormat = "Mon, Jan 02"
+
+type EventSource interface {
+	getEvents(time.Time) ([]event, error)
+}
 
 func main() {
 	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
@@ -32,29 +38,39 @@ func main() {
 
 	parseArgs()
 
-	app := app.New()
-	window := app.NewWindow("Daily")
+	displayDay = time.Now()
+
+	dailyApp := app.NewWithID("com.github.theHilikus.daily")
+	window := dailyApp.NewWindow("Daily")
 	window.Resize(fyne.NewSize(400, 600))
 
 	refreshButton := widget.NewButton("Refresh", refresh)
-	settingsButton := widget.NewButton("Settings", showSettings)
+	settingsButton := widget.NewButton("Settings", func() { showSettings(dailyApp) })
 	toolbar := container.NewHBox(layout.NewSpacer(), refreshButton, settingsButton)
 
-	dayLabel := widget.NewLabel(currentDay.Format(dayFormat))
+	dayLabel := widget.NewLabel(displayDay.Format(dayFormat))
 	dayLabel.TextStyle = fyne.TextStyle{Bold: true}
 	dayBar := container.NewHBox(layout.NewSpacer(), dayLabel, layout.NewSpacer())
 	topBar := container.NewVBox(toolbar, dayBar)
 
 	eventsList = container.NewVBox()
-	refresh()
 
 	previousDay := widget.NewButton("Previous day", func() { changeDay(-1, dayLabel) })
 	nextDay := widget.NewButton("Next day", func() { changeDay(1, dayLabel) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
-
 	window.SetContent(content)
+
+	preferences = dailyApp.Preferences()
+	calendarToken := preferences.String("calendar-token")
+	if calendarToken == "" {
+		slog.Info("Calendar config not found. Starting in Settings UI")
+		showSettings(dailyApp)
+	} else {
+		refresh()
+	}
+
 	window.ShowAndRun()
 }
 
@@ -64,54 +80,58 @@ func parseArgs() {
 }
 
 func refresh() {
-	slog.Info("Refreshing data around date " + currentDay.Format("2006-01-02"))
+	slog.Info("Refreshing data around date " + displayDay.Format("2006-01-02"))
 
-	events := getEvents()
-	for _, event := range events {
-		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
-		eventStyle := fyne.TextStyle{}
-		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
-		if event.isFinished() {
-			//past events
-			eventColour = theme.DisabledColor()
-		} else if event.isStarted() {
-			//ongoing events
-			timeToEnd := time.Until(event.end)
-			if int(timeToEnd.Hours()) > 0 {
-				eventText += " (for " + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " more)"
-			} else {
-				eventText += " (for " + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " more)"
-			}
-			eventStyle.Bold = true
-		} else {
-			//future events
-			timeToStart := time.Until(event.start)
-			if timeToStart >= 0 {
-				if int(timeToStart.Hours()) > 0 {
-					eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
+	events, err := getEvents()
+	if err != nil {
+		slog.Error("Could not retrieve calendar events")
+	} else {
+		for _, event := range events {
+			eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
+			eventStyle := fyne.TextStyle{}
+			eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
+			if event.isFinished() {
+				//past events
+				eventColour = theme.DisabledColor()
+			} else if event.isStarted() {
+				//ongoing events
+				timeToEnd := time.Until(event.end)
+				if int(timeToEnd.Hours()) > 0 {
+					eventText += " (for " + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " more)"
 				} else {
-					eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
+					eventText += " (for " + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " more)"
+				}
+				eventStyle.Bold = true
+			} else {
+				//future events
+				timeToStart := time.Until(event.start)
+				if timeToStart >= 0 {
+					if int(timeToStart.Hours()) > 0 {
+						eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
+					} else {
+						eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
+					}
 				}
 			}
-		}
 
-		title := ui.NewClickableText(eventText, eventStyle, eventColour)
-		details := widget.TextSegment{
-			Text: event.details,
+			title := ui.NewClickableText(eventText, eventStyle, eventColour)
+			details := widget.TextSegment{
+				Text: event.details,
+			}
+			eventsList.Add(ui.NewEvent(title, []*widget.Button{}, widget.NewRichText(&details)))
 		}
-		eventsList.Add(ui.NewEvent(title, []*widget.Button{}, widget.NewRichText(&details)))
 	}
 }
 
-func showSettings() {
+func showSettings(dailyApp fyne.App) {
 	slog.Info("Opening settings panel")
 }
 
 func changeDay(offset int, dayLabel *widget.Label) {
 	slog.Info("Changing day by " + strconv.Itoa(offset))
-	currentDay = currentDay.AddDate(0, 0, offset)
-	dayLabel.SetText(currentDay.Format(dayFormat))
-	slog.Debug("New day is " + currentDay.Format("2006-01-02"))
+	displayDay = displayDay.AddDate(0, 0, offset)
+	dayLabel.SetText(displayDay.Format(dayFormat))
+	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
 }
 
 type event struct {
@@ -131,11 +151,21 @@ func (otherEvent *event) isStarted() bool {
 	return otherEvent.start.Before(now) && otherEvent.end.After(now)
 }
 
-func getEvents() []event {
+func getEvents() ([]event, error) {
 	if *testCalendar {
-		return getDummyEvents()
+		return getDummyEvents(), nil
 	}
-	return nil
+
+	if eventSource == nil {
+		var err error
+		eventSource, err = newGoogleCalendar()
+		if err != nil {
+            return nil, err
+        }
+	}
+
+	return eventSource.getEvents(displayDay)
+
 }
 
 func getDummyEvents() []event {
