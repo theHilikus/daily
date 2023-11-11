@@ -30,7 +30,9 @@ var (
 
 const dayFormat = "Mon, Jan 02"
 
+// An entity that can retrieve calendar events
 type EventSource interface {
+	// Gets a slice of events for the particular day specified
 	getEvents(time.Time) ([]event, error)
 }
 
@@ -41,6 +43,21 @@ func main() {
 
 	parseArgs()
 
+	window := buildUi()
+
+	preferences = dailyApp.Preferences()
+	calendarToken := preferences.String("calendar-token")
+	if calendarToken == "" {
+		slog.Info("Calendar config not found. Starting in Settings UI")
+		showSettings(dailyApp)
+	} else {
+		refresh()
+	}
+
+	window.ShowAndRun()
+}
+
+func buildUi() fyne.Window {
 	displayDay = time.Now()
 
 	dailyApp = app.NewWithID("com.github.theHilikus.daily")
@@ -66,16 +83,7 @@ func main() {
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
 	window.SetContent(content)
 
-	preferences = dailyApp.Preferences()
-	calendarToken := preferences.String("calendar-token")
-	if calendarToken == "" {
-		slog.Info("Calendar config not found. Starting in Settings UI")
-		showSettings(dailyApp)
-	} else {
-		refresh()
-	}
-
-	window.ShowAndRun()
+	return window
 }
 
 func parseArgs() {
@@ -85,7 +93,7 @@ func parseArgs() {
 
 func refresh() {
 	slog.Info("Refreshing data around date " + displayDay.Format("2006-01-02"))
-
+	eventsList.RemoveAll()
 	events, err := getEvents()
 	if err != nil {
 		slog.Error("Could not retrieve calendar events")
@@ -147,6 +155,13 @@ func changeDay(offset int, dayLabel *widget.Label) {
 	displayDay = displayDay.AddDate(0, 0, offset)
 	dayLabel.SetText(displayDay.Format(dayFormat))
 	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
+	refresh()
+}
+
+func isOnSameDay(one time.Time, other time.Time) bool {
+	year1, month1, day1 := one.Date()
+	year2, month2, day2 := other.Date()
+	return year1 == year2 && month1 == month2 && day1 == day2
 }
 
 type event struct {
@@ -167,15 +182,17 @@ func (otherEvent *event) isStarted() bool {
 }
 
 func getEvents() ([]event, error) {
-	if *testCalendar {
-		return getDummyEvents(), nil
-	}
-
 	if eventSource == nil {
-		var err error
-		eventSource, err = newGoogleCalendar()
-		if err != nil {
-			return nil, err
+		slog.Info("No event source found. Creating one")
+		if *testCalendar {
+			eventSource = dummyEventSource{}
+
+		} else {
+			var err error
+			eventSource, err = newGoogleCalendar()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -183,19 +200,35 @@ func getEvents() ([]event, error) {
 
 }
 
-func getDummyEvents() []event {
+type dummyEventSource struct {
+}
+
+func (dummy dummyEventSource) getEvents(day time.Time) ([]event, error) {
 	slog.Debug("Returning dummy events")
 	now := time.Now()
 	start1 := now.Add(-3 * time.Hour)
 	end1 := start1.Add(30 * time.Minute)
-	result := []event{
-		{title: "title1", location: "location1", details: "details1", start: start1, end: end1},
-		{title: "title2", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour)},
-		{title: "title3", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute)},
-		{title: "A very long title that that is way\nlonger than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour)},
-		{title: "title5", location: "location5", details: "details5", start: start1.Add(6 * time.Hour), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
-		{title: "title6", location: "https://meet.google.com/3456", details: "details6", start: start1.Add(7 * time.Hour), end: time.Now().Add(7*time.Hour + 30*time.Minute)},
+	var result []event
+	if isOnSameDay(now, day) {
+		result = []event{
+			{title: "past event", location: "location1", details: "details1", start: start1, end: end1},
+			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour)},
+			{title: "current event", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute)},
+			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour)},
+			{title: "future event today", location: "location5", details: "details5", start: start1.Add(6 * time.Hour), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
+			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: start1.Add(7 * time.Hour), end: time.Now().Add(7*time.Hour + 30*time.Minute)},
+		}
+	} else if day.Before(now) {
+		//past
+		result = []event{
+			{title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
+		}
+	} else {
+		//future
+		result = []event{
+			{title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},
+		}
 	}
 
-	return result
+	return result, nil
 }
