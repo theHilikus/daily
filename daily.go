@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/robfig/cron/v3"
 	"github.com/theHilikus/daily/internal/ui"
 )
 
@@ -26,6 +27,7 @@ var (
 	eventSource  EventSource
 	preferences  fyne.Preferences
 	dailyApp     fyne.App
+	cronHandler  *cron.Cron
 )
 
 const dayFormat = "Mon, Jan 02"
@@ -47,11 +49,17 @@ func main() {
 
 	preferences = dailyApp.Preferences()
 	calendarToken := preferences.String("calendar-token")
-	if calendarToken == "" {
+	if calendarToken != "" {
+		refresh()
+	} else {
 		slog.Info("Calendar config not found. Starting in Settings UI")
 		showSettings(dailyApp)
-	} else {
-		refresh()
+	}
+
+	if cronHandler == nil {
+		cronHandler = cron.New()
+		cronHandler.AddFunc("* * * * *", refresh)
+		cronHandler.Start()
 	}
 
 	window.ShowAndRun()
@@ -97,53 +105,57 @@ func refresh() {
 	events, err := getEvents()
 	if err != nil {
 		slog.Error("Could not retrieve calendar events")
-	} else {
-		for _, event := range events {
-			eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
-			eventStyle := fyne.TextStyle{}
-			eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
-			if event.isFinished() {
-				//past events
-				eventColour = theme.DisabledColor()
-			} else if event.isStarted() {
-				//ongoing events
-				timeToEnd := time.Until(event.end)
-				if int(timeToEnd.Hours()) > 0 {
-					eventText += " (for " + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " more)"
-				} else {
-					eventText += " (for " + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " more)"
-				}
-				eventStyle.Bold = true
-			} else {
-				//future events
-				timeToStart := time.Until(event.start)
-				if timeToStart >= 0 {
-					if int(timeToStart.Hours()) > 0 {
-						eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
-					} else {
-						eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
-					}
-				}
-			}
-
-			title := ui.NewClickableText(eventText, eventStyle, eventColour)
-			details := widget.TextSegment{
-				Text: event.details,
-			}
-			var buttons []*widget.Button
-			if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
-				locationUrl, err := url.Parse(event.location)
-				if err == nil {
-					meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() { dailyApp.OpenURL(locationUrl) })
-					if event.isFinished() {
-						meetingButton.Disable()
-					}
-					buttons = append(buttons, meetingButton)
-				}
-			}
-			eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
-		}
+		return
 	}
+
+	for _, event := range events {
+		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
+		eventStyle := fyne.TextStyle{}
+		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
+		if event.isFinished() {
+			//past events
+			eventColour = theme.DisabledColor()
+		} else if event.isStarted() {
+			//ongoing events
+			fmt.Println("time between " + time.Now().Format(time.RFC3339) + " and " + event.end.Format(time.RFC3339))
+			timeToEnd := time.Until(event.end).Round(time.Minute)
+			fmt.Println("= " + timeToEnd.String())
+			if int(timeToEnd.Hours()) > 0 {
+				eventText += " (" + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " remaining)"
+			} else {
+				eventText += " (" + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " remaining)"
+			}
+			eventStyle.Bold = true
+		} else {
+			//future events
+			timeToStart := time.Until(event.start).Round(time.Minute)
+			if timeToStart >= 0 {
+				if int(timeToStart.Hours()) > 0 {
+					eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
+				} else {
+					eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
+				}
+			}
+		}
+
+		title := ui.NewClickableText(eventText, eventStyle, eventColour)
+		details := widget.TextSegment{
+			Text: event.details,
+		}
+		var buttons []*widget.Button
+		if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
+			locationUrl, err := url.Parse(event.location)
+			if err == nil {
+				meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() { dailyApp.OpenURL(locationUrl) })
+				if event.isFinished() {
+					meetingButton.Disable()
+				}
+				buttons = append(buttons, meetingButton)
+			}
+		}
+		eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
+	}
+	eventsList.Refresh()
 }
 
 func showSettings(dailyApp fyne.App) {
