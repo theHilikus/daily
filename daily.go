@@ -48,8 +48,8 @@ func main() {
 	window := dailyApp.NewWindow("Daily")
 	window.Resize(fyne.NewSize(400, 600))
 
-	refreshButton := widget.NewButton("Refresh", refresh)
-	settingsButton := widget.NewButton("Settings", func() { showSettings(dailyApp) })
+	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), refresh)
+	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
 	toolbar := container.NewHBox(layout.NewSpacer(), refreshButton, settingsButton)
 
 	dayLabel := widget.NewLabel(displayDay.Format(dayFormat))
@@ -59,8 +59,8 @@ func main() {
 
 	eventsList = container.NewVBox()
 
-	previousDay := widget.NewButton("Previous day", func() { changeDay(-1, dayLabel) })
-	nextDay := widget.NewButton("Next day", func() { changeDay(1, dayLabel) })
+	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(-1, dayLabel) })
+	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(1, dayLabel) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
@@ -126,7 +126,7 @@ func refresh() {
 			if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
 				locationUrl, err := url.Parse(event.location)
 				if err == nil {
-					meetingButton := widget.NewButton("Meeting", func() { dailyApp.OpenURL(locationUrl) })
+					meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() { dailyApp.OpenURL(locationUrl) })
 					if event.isFinished() {
 						meetingButton.Disable()
 					}
