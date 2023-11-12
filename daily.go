@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/robfig/cron/v3"
 	"github.com/theHilikus/daily/internal/ui"
 )
 
@@ -24,8 +24,8 @@ var (
 	eventsList   *fyne.Container
 	testCalendar *bool
 	eventSource  EventSource
-	preferences  fyne.Preferences
 	dailyApp     fyne.App
+	cronHandler  *cron.Cron
 )
 
 const dayFormat = "Mon, Jan 02"
@@ -45,13 +45,18 @@ func main() {
 
 	window := buildUi()
 
-	preferences = dailyApp.Preferences()
-	calendarToken := preferences.String("calendar-token")
-	if calendarToken == "" {
+	calendarToken := dailyApp.Preferences().String("calendar-token")
+	if calendarToken != "" {
+		refresh()
+	} else {
 		slog.Info("Calendar config not found. Starting in Settings UI")
 		showSettings(dailyApp)
-	} else {
-		refresh()
+	}
+
+	if cronHandler == nil {
+		cronHandler = cron.New()
+		cronHandler.AddFunc("* * * * *", refresh)
+		cronHandler.Start()
 	}
 
 	window.ShowAndRun()
@@ -76,8 +81,8 @@ func buildUi() fyne.Window {
 
 	eventsList = container.NewVBox()
 
-	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(-1, dayLabel) })
-	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(1, dayLabel) })
+	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(displayDay.AddDate(0, 0, -1), dayLabel) })
+	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayLabel) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
@@ -97,62 +102,66 @@ func refresh() {
 	events, err := getEvents()
 	if err != nil {
 		slog.Error("Could not retrieve calendar events")
-	} else {
-		for _, event := range events {
-			eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
-			eventStyle := fyne.TextStyle{}
-			eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
-			if event.isFinished() {
-				//past events
-				eventColour = theme.DisabledColor()
-			} else if event.isStarted() {
-				//ongoing events
-				timeToEnd := time.Until(event.end)
-				if int(timeToEnd.Hours()) > 0 {
-					eventText += " (for " + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " more)"
-				} else {
-					eventText += " (for " + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " more)"
-				}
-				eventStyle.Bold = true
-			} else {
-				//future events
-				timeToStart := time.Until(event.start)
-				if timeToStart >= 0 {
-					if int(timeToStart.Hours()) > 0 {
-						eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
-					} else {
-						eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
-					}
-				}
-			}
-
-			title := ui.NewClickableText(eventText, eventStyle, eventColour)
-			details := widget.TextSegment{
-				Text: event.details,
-			}
-			var buttons []*widget.Button
-			if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
-				locationUrl, err := url.Parse(event.location)
-				if err == nil {
-					meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() { dailyApp.OpenURL(locationUrl) })
-					if event.isFinished() {
-						meetingButton.Disable()
-					}
-					buttons = append(buttons, meetingButton)
-				}
-			}
-			eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
-		}
+		return
 	}
+
+	for _, event := range events {
+		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
+		eventStyle := fyne.TextStyle{}
+		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
+		if event.isFinished() {
+			//past events
+			eventColour = theme.DisabledColor()
+		} else if event.isStarted() {
+			//ongoing events
+			fmt.Println("time between " + time.Now().Format(time.RFC3339) + " and " + event.end.Format(time.RFC3339))
+			timeToEnd := time.Until(event.end).Round(time.Minute)
+			fmt.Println("= " + timeToEnd.String())
+			if int(timeToEnd.Hours()) > 0 {
+				eventText += " (" + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " remaining)"
+			} else {
+				eventText += " (" + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " remaining)"
+			}
+			eventStyle.Bold = true
+		} else {
+			//future events
+			timeToStart := time.Until(event.start).Round(time.Minute)
+			if timeToStart >= 0 {
+				if int(timeToStart.Hours()) > 0 {
+					eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
+				} else {
+					eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
+				}
+			}
+		}
+
+		title := ui.NewClickableText(eventText, eventStyle, eventColour)
+		details := widget.TextSegment{
+			Text: event.details,
+		}
+		var buttons []*widget.Button
+		if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
+			locationUrl, err := url.Parse(event.location)
+			if err == nil {
+				meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() { dailyApp.OpenURL(locationUrl) })
+				if event.isFinished() {
+					meetingButton.Disable()
+				}
+				buttons = append(buttons, meetingButton)
+			}
+		}
+		eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
+	}
+	eventsList.Refresh()
 }
 
 func showSettings(dailyApp fyne.App) {
 	slog.Info("Opening settings panel")
 }
 
-func changeDay(offset int, dayLabel *widget.Label) {
-	slog.Info("Changing day by " + strconv.Itoa(offset))
-	displayDay = displayDay.AddDate(0, 0, offset)
+func changeDay(newDate time.Time, dayLabel *widget.Label) {
+	slog.Info("Changing day to " + newDate.Format(time.RFC3339))
+	displayDay = newDate
 	dayLabel.SetText(displayDay.Format(dayFormat))
 	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
 	refresh()
@@ -185,7 +194,7 @@ func getEvents() ([]event, error) {
 	if eventSource == nil {
 		slog.Info("No event source found. Creating one")
 		if *testCalendar {
-			eventSource = dummyEventSource{}
+			eventSource = dummyEventSource{now: time.Now()}
 
 		} else {
 			var err error
@@ -201,24 +210,24 @@ func getEvents() ([]event, error) {
 }
 
 type dummyEventSource struct {
+	now time.Time
 }
 
 func (dummy dummyEventSource) getEvents(day time.Time) ([]event, error) {
 	slog.Debug("Returning dummy events")
-	now := time.Now()
-	start1 := now.Add(-3 * time.Hour)
+	start1 := dummy.now.Add(-3 * time.Hour)
 	end1 := start1.Add(30 * time.Minute)
 	var result []event
-	if isOnSameDay(now, day) {
+	if isOnSameDay(dummy.now, day) {
 		result = []event{
 			{title: "past event", location: "location1", details: "details1", start: start1, end: end1},
 			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour)},
-			{title: "current event", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute)},
-			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour)},
+			{title: "current event", location: "location3", details: "detauls3", start: dummy.now, end: dummy.now.Add(30 * time.Minute)},
+			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: dummy.now, end: dummy.now.Add(time.Hour)},
 			{title: "future event today", location: "location5", details: "details5", start: start1.Add(6 * time.Hour), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
 			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: start1.Add(7 * time.Hour), end: time.Now().Add(7*time.Hour + 30*time.Minute)},
 		}
-	} else if day.Before(now) {
+	} else if day.Before(dummy.now) {
 		//past
 		result = []event{
 			{title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
