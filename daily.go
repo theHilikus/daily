@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +24,6 @@ var (
 	eventsList   *fyne.Container
 	testCalendar *bool
 	eventSource  EventSource
-	preferences  fyne.Preferences
 	dailyApp     fyne.App
 	cronHandler  *cron.Cron
 )
@@ -47,8 +45,7 @@ func main() {
 
 	window := buildUi()
 
-	preferences = dailyApp.Preferences()
-	calendarToken := preferences.String("calendar-token")
+	calendarToken := dailyApp.Preferences().String("calendar-token")
 	if calendarToken != "" {
 		refresh()
 	} else {
@@ -84,8 +81,8 @@ func buildUi() fyne.Window {
 
 	eventsList = container.NewVBox()
 
-	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(-1, dayLabel) })
-	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(1, dayLabel) })
+	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(displayDay.AddDate(0, 0, -1), dayLabel) })
+	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayLabel) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
@@ -162,9 +159,9 @@ func showSettings(dailyApp fyne.App) {
 	slog.Info("Opening settings panel")
 }
 
-func changeDay(offset int, dayLabel *widget.Label) {
-	slog.Info("Changing day by " + strconv.Itoa(offset))
-	displayDay = displayDay.AddDate(0, 0, offset)
+func changeDay(newDate time.Time, dayLabel *widget.Label) {
+	slog.Info("Changing day to " + newDate.Format(time.RFC3339))
+	displayDay = newDate
 	dayLabel.SetText(displayDay.Format(dayFormat))
 	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
 	refresh()
