@@ -1,0 +1,8 @@
+Website = "https://github.com/theHilikus/daily"
+
+[Details]
+Icon = "internal/assets/icons/app-icon.png"
+Name = "Daily"
+ID = "com.github.theHilikus.daily"
+Version = "0.0.1"
+Build = 1
