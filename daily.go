@@ -114,9 +114,7 @@ func refresh() {
 			eventColour = theme.DisabledColor()
 		} else if event.isStarted() {
 			//ongoing events
-			fmt.Println("time between " + time.Now().Format(time.RFC3339) + " and " + event.end.Format(time.RFC3339))
 			timeToEnd := time.Until(event.end).Round(time.Minute)
-			fmt.Println("= " + timeToEnd.String())
 			if int(timeToEnd.Hours()) > 0 {
 				eventText += " (" + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " remaining)"
 			} else {
