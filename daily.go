@@ -12,9 +12,11 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"fyne.io/systray"
 	"github.com/robfig/cron/v3"
 	"github.com/theHilikus/daily/internal/ui"
 )
@@ -69,6 +71,20 @@ func buildUi() fyne.Window {
 
 	window := dailyApp.NewWindow("Daily")
 	window.Resize(fyne.NewSize(400, 600))
+
+	dailyApp.SetIcon(ui.ResourceAppIconPng)
+	
+	if desk, ok := dailyApp.(desktop.App); ok {
+		showItem := fyne.NewMenuItem("Show", func() {
+			window.Show()
+		})
+		menu := fyne.NewMenu("Daily Systray Menu", showItem)
+		desk.SetSystemTrayMenu(menu)
+		systray.SetTitle("Daily")
+		window.SetCloseIntercept(func() {
+			window.Hide()
+		})
+	}
 
 	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), refresh)
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
