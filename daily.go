@@ -208,8 +208,7 @@ func getEvents() ([]event, error) {
 	if eventSource == nil {
 		slog.Info("No event source found. Creating one")
 		if *testCalendar {
-			eventSource = dummyEventSource{now: time.Now()}
-
+			eventSource = newDummyEventSource()
 		} else {
 			var err error
 			eventSource, err = newGoogleCalendar()
@@ -224,33 +223,47 @@ func getEvents() ([]event, error) {
 }
 
 type dummyEventSource struct {
-	now time.Time
+	originalNow time.Time
+	yesterday   []event
+	today       []event
+	tomorrow    []event
+}
+
+func newDummyEventSource() *dummyEventSource {
+	now := time.Now()
+	start1 := now.Add(-3 * time.Hour)
+	end1 := start1.Add(30 * time.Minute)
+	return &dummyEventSource{
+		originalNow: now,
+		yesterday: []event{
+			{title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
+		},
+		today: []event{
+			{title: "past event", location: "location1", details: "details1", start: start1, end: end1},
+			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour)},
+			{title: "current event", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute)},
+			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour)},
+			{title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
+			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: start1.Add(7 * time.Hour), end: time.Now().Add(7*time.Hour + 30*time.Minute)},
+		},
+		tomorrow: []event{
+			{title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},
+		},
+	}
 }
 
 func (dummy dummyEventSource) getEvents(day time.Time) ([]event, error) {
 	slog.Debug("Returning dummy events")
-	start1 := dummy.now.Add(-3 * time.Hour)
-	end1 := start1.Add(30 * time.Minute)
+
 	var result []event
-	if isOnSameDay(dummy.now, day) {
-		result = []event{
-			{title: "past event", location: "location1", details: "details1", start: start1, end: end1},
-			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour)},
-			{title: "current event", location: "location3", details: "detauls3", start: dummy.now, end: dummy.now.Add(30 * time.Minute)},
-			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: dummy.now, end: dummy.now.Add(time.Hour)},
-			{title: "future event today", location: "location5", details: "details5", start: start1.Add(6 * time.Hour), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
-			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: start1.Add(7 * time.Hour), end: time.Now().Add(7*time.Hour + 30*time.Minute)},
-		}
-	} else if day.Before(dummy.now) {
+	if isOnSameDay(dummy.originalNow, day) {
+		result = dummy.today
+	} else if day.Before(dummy.originalNow) {
 		//past
-		result = []event{
-			{title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
-		}
+		result = dummy.yesterday
 	} else {
 		//future
-		result = []event{
-			{title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},
-		}
+		result = dummy.tomorrow
 	}
 
 	return result, nil
