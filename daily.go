@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,7 +74,7 @@ func buildUi() fyne.Window {
 	window.Resize(fyne.NewSize(400, 600))
 
 	dailyApp.SetIcon(ui.ResourceAppIconPng)
-	
+
 	if desk, ok := dailyApp.(desktop.App); ok {
 		showItem := fyne.NewMenuItem("Show", func() {
 			window.Show()
@@ -121,7 +122,8 @@ func refresh() {
 		return
 	}
 
-	for _, event := range events {
+	for pos := range events {
+		event := &events[pos]
 		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
 		eventStyle := fyne.TextStyle{}
 		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
@@ -147,6 +149,9 @@ func refresh() {
 					eventText += " (in " + fmt.Sprintf("%dm", int(timeToStart.Minutes())) + ")"
 				}
 			}
+			if !event.notified && int(timeToStart.Round(time.Minute).Minutes()) <= dailyApp.Preferences().IntWithFallback("notification-time", 1) {
+				notify(event, timeToStart)
+			}
 		}
 
 		title := ui.NewClickableText(eventText, eventStyle, eventColour)
@@ -167,6 +172,21 @@ func refresh() {
 		eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
 	}
 	eventsList.Refresh()
+}
+
+func notify(event *event, timeToStart time.Duration) {
+	slog.Debug("Sending notification for '" + event.title + "'")
+	remaining := int(timeToStart.Round(time.Minute).Minutes())
+	notifTitle := "'" + event.title + "' is starting soon"
+	notifBody := strconv.Itoa(remaining) + " minutes to event"
+	if remaining == 1 {
+		notifBody = strconv.Itoa(remaining) + " minute to event"
+	} else if remaining <= 0 {
+		notifTitle = "'" + event.title + "' is starting now"
+	}
+	notification := fyne.NewNotification(notifTitle, notifBody)
+	dailyApp.SendNotification(notification)
+	event.notified = true
 }
 
 func showSettings(dailyApp fyne.App) {
@@ -193,6 +213,7 @@ type event struct {
 	end      time.Time
 	location string
 	details  string
+	notified bool
 }
 
 func (otherEvent *event) isFinished() bool {
