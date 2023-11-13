@@ -132,9 +132,9 @@ func refresh() {
 			//ongoing events
 			timeToEnd := time.Until(event.end).Round(time.Minute)
 			if int(timeToEnd.Hours()) > 0 {
-				eventText += " (" + fmt.Sprintf("%dh%02dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " remaining)"
+				eventText += " (" + fmt.Sprintf("%dh%dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " remaining)"
 			} else {
-				eventText += " (" + fmt.Sprintf("%02dm", int(timeToEnd.Minutes())) + " remaining)"
+				eventText += " (" + fmt.Sprintf("%dm", int(timeToEnd.Minutes())) + " remaining)"
 			}
 			eventStyle.Bold = true
 		} else {
@@ -142,9 +142,9 @@ func refresh() {
 			timeToStart := time.Until(event.start).Round(time.Minute)
 			if timeToStart >= 0 {
 				if int(timeToStart.Hours()) > 0 {
-					eventText += " (in " + fmt.Sprintf("%dh%02dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
+					eventText += " (in " + fmt.Sprintf("%dh%dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
 				} else {
-					eventText += " (in " + fmt.Sprintf("%02dm", int(timeToStart.Minutes())) + ")"
+					eventText += " (in " + fmt.Sprintf("%dm", int(timeToStart.Minutes())) + ")"
 				}
 			}
 		}
