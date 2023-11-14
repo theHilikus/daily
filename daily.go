@@ -69,11 +69,10 @@ func buildUi() fyne.Window {
 	displayDay = time.Now()
 
 	dailyApp = app.NewWithID("com.github.theHilikus.daily")
+	dailyApp.SetIcon(ui.ResourceAppIconPng)
 
 	window := dailyApp.NewWindow("Daily")
 	window.Resize(fyne.NewSize(400, 600))
-
-	dailyApp.SetIcon(ui.ResourceAppIconPng)
 
 	if desk, ok := dailyApp.(desktop.App); ok {
 		showItem := fyne.NewMenuItem("Show", func() {
