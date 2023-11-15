@@ -160,13 +160,13 @@ func refresh() {
 
 		switch event.response {
 		case needsAction:
-			eventText += " 🚩"
+			eventText = "🚩 " + eventText
 		case declined:
-			eventText += " ❎"
+			eventText = "❎ " + eventText
 		case tentative:
-			eventText += " ❓"
+			eventText = "❓ " + eventText
 		case accepted:
-			eventText += " ✅"
+			eventText = "✅ " + eventText
 		}
 
 		title := ui.NewClickableText(eventText, eventStyle, eventColour)
