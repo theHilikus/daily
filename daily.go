@@ -218,7 +218,17 @@ type event struct {
 	location   string
 	details    string
 	notifiable bool
+	response   responseStatus
 }
+
+type responseStatus string
+
+const (
+	needsAction responseStatus = "needsAction"
+	declined    responseStatus = "declined"
+	tentative   responseStatus = "tentative"
+	accepted    responseStatus = "accepted"
+)
 
 func (otherEvent *event) isFinished() bool {
 	return otherEvent.end.Before(time.Now())
@@ -264,12 +274,12 @@ func newDummyEventSource() *dummyEventSource {
 			{title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
 		},
 		today: []event{
-			{title: "past event", location: "location1", details: "details1", start: start1, end: end1},
-			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour)},
-			{title: "current event", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute)},
-			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour)},
-			{title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
-			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true},
+			{title: "past event", location: "location1", details: "details1", start: start1, end: end1, response: accepted},
+			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour), response: declined},
+			{title: "current event", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute), response: declined},
+			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour), response: tentative},
+			{title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
+			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true, response: accepted},
 		},
 		tomorrow: []event{
 			{title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},

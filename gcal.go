@@ -124,12 +124,21 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 				return err
 			}
 
+			var selfResponse responseStatus
+			for _, attendee := range item.Attendees {
+				if attendee.Self {
+					selfResponse = responseStatus(attendee.ResponseStatus)
+					break
+				}
+			}
+
 			newEvent := event{
 				title:      item.Summary,
 				start:      eventStart,
 				end:        eventEnd,
 				details:    item.Description,
-				notifiable: shouldNotify(item),
+				notifiable: selfResponse != "declined" && item.Transparency != "transparent",
+				response:   selfResponse,
 			}
 			if item.HangoutLink != "" {
 				newEvent.location = item.HangoutLink
@@ -142,19 +151,4 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	gcal.eventsBuffer = allEvents
 
 	return nil
-}
-
-func shouldNotify(item *calendar.Event) bool {
-	busy := item.Transparency != "transparent"
-	declined := false
-	for _, attendee := range item.Attendees {
-		if attendee.Self {
-			if attendee.ResponseStatus == "declined" {
-				declined = true
-			}
-			break
-		}
-	}
-
-	return busy && !declined
 }
