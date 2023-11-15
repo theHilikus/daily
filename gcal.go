@@ -125,10 +125,11 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 			}
 
 			newEvent := event{
-				title:   item.Summary,
-				start:   eventStart,
-				end:     eventEnd,
-				details: item.Description,
+				title:      item.Summary,
+				start:      eventStart,
+				end:        eventEnd,
+				details:    item.Description,
+				notifiable: item.Transparency == "opaque",
 			}
 			if item.HangoutLink != "" {
 				newEvent.location = item.HangoutLink

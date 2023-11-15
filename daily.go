@@ -148,8 +148,13 @@ func refresh() {
 					eventText += " (in " + fmt.Sprintf("%dm", int(timeToStart.Minutes())) + ")"
 				}
 			}
-			if !event.notified && int(timeToStart.Round(time.Minute).Minutes()) <= dailyApp.Preferences().IntWithFallback("notification-time", 1) {
-				notify(event, timeToStart)
+
+			if int(timeToStart.Round(time.Minute).Minutes()) <= dailyApp.Preferences().IntWithFallback("notification-time", 1) {
+				if event.notifiable {
+					notify(event, timeToStart)
+				} else {
+					slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
+				}
 			}
 		}
 
@@ -185,7 +190,7 @@ func notify(event *event, timeToStart time.Duration) {
 	}
 	notification := fyne.NewNotification(notifTitle, notifBody)
 	dailyApp.SendNotification(notification)
-	event.notified = true
+	event.notifiable = false
 }
 
 func showSettings(dailyApp fyne.App) {
@@ -207,12 +212,12 @@ func isOnSameDay(one time.Time, other time.Time) bool {
 }
 
 type event struct {
-	title    string
-	start    time.Time
-	end      time.Time
-	location string
-	details  string
-	notified bool
+	title      string
+	start      time.Time
+	end        time.Time
+	location   string
+	details    string
+	notifiable bool
 }
 
 func (otherEvent *event) isFinished() bool {
@@ -264,7 +269,7 @@ func newDummyEventSource() *dummyEventSource {
 			{title: "current event", location: "location3", details: "detauls3", start: now, end: now.Add(30 * time.Minute)},
 			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour)},
 			{title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute)},
-			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: start1.Add(7 * time.Hour), end: time.Now().Add(7*time.Hour + 30*time.Minute)},
+			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true},
 		},
 		tomorrow: []event{
 			{title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},
