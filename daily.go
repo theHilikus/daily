@@ -158,6 +158,17 @@ func refresh() {
 			}
 		}
 
+		switch event.response {
+		case needsAction:
+			eventText += " 🚩"
+		case declined:
+			eventText += " ❎"
+		case tentative:
+			eventText += " ❓"
+		case accepted:
+			eventText += " ✅"
+		}
+
 		title := ui.NewClickableText(eventText, eventStyle, eventColour)
 		details := widget.TextSegment{
 			Text: event.details,
