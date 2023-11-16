@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,7 +101,7 @@ func (gcal *googleCalendar) getEvents(day time.Time) ([]event, error) {
 
 func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	_, timezoneOffset := day.Zone()
-	const requestHalfWindow int = 4
+	const requestHalfWindow int = 5
 	gcal.requestStartDate = day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	gcal.requestEndDate = day.AddDate(0, 0, requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	slog.Info("Retrieving events between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339))
@@ -112,7 +113,9 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 		Fields("etag", "nextPageToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency)").
 		Do()
 
-	if err != nil {
+	if err == nil {
+		slog.Debug("Retrieved " + strconv.Itoa(len(response.Items)) + " event(s) successfully")
+	} else {
 		slog.Error("Unable to retrieve events from google:", err)
 		return err
 	}
