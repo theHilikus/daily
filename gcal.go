@@ -104,7 +104,14 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	gcal.requestStartDate = day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	gcal.requestEndDate = day.AddDate(0, 0, requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	slog.Info("Retrieving events between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339))
-	response, err := gcal.service.Events.List(dailyApp.Preferences().String("calendar-id")).SingleEvents(true).TimeMin(gcal.requestStartDate.Format(time.RFC3339)).TimeMax(gcal.requestEndDate.Format(time.RFC3339)).OrderBy("startTime").Do()
+	response, err := gcal.service.Events.List(dailyApp.Preferences().String("calendar-id")).
+		SingleEvents(true).
+		TimeMin(gcal.requestStartDate.Format(time.RFC3339)).
+		TimeMax(gcal.requestEndDate.Format(time.RFC3339)).
+		OrderBy("startTime").
+		Fields("etag", "nextPageToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency)").
+		Do()
+
 	if err != nil {
 		slog.Error("Unable to retrieve events from google:", err)
 		return err
