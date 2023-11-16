@@ -60,7 +60,7 @@ func newGoogleCalendar() (*googleCalendar, error) {
 	return &result, nil
 }
 
-func (gcal googleCalendar) getEvents(day time.Time) ([]event, error) {
+func (gcal *googleCalendar) getEvents(day time.Time) ([]event, error) {
 
 	if len(gcal.eventsBuffer) == 0 {
 		slog.Debug("Events buffer is empty")
