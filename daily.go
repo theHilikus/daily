@@ -25,10 +25,12 @@ import (
 var (
 	displayDay   time.Time
 	eventsList   *fyne.Container
-	testCalendar *bool
-	eventSource  EventSource
-	dailyApp     fyne.App
-	cronHandler  *cron.Cron
+	testCalendar = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
+	verbose      = flag.Bool("verbose", false, "Enable extra debug logs")
+
+	eventSource EventSource
+	dailyApp    fyne.App
+	cronHandler *cron.Cron
 )
 
 const dayFormat = "Mon, Jan 02"
@@ -40,11 +42,10 @@ type EventSource interface {
 }
 
 func main() {
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
-	slog.SetDefault(slog.New(handler))
-	slog.Info("Starting app")
+	flag.Parse()
+	configureLog()
 
-	parseArgs()
+	slog.Info("Starting app")
 
 	window := buildUi()
 
@@ -63,6 +64,24 @@ func main() {
 	}
 
 	window.ShowAndRun()
+}
+
+func configureLog() {
+	replacer := func(groups []string, attr slog.Attr) slog.Attr {
+		if attr.Key == slog.TimeKey {
+			time := attr.Value.Time()
+			return slog.String("time", time.Format("15:04:05.000"))
+		}
+		return attr
+	}
+
+	lvl := new(slog.LevelVar)
+	lvl.Set(slog.LevelInfo)
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl, ReplaceAttr: replacer})
+	if *verbose {
+		lvl.Set(slog.LevelDebug)
+	}
+	slog.SetDefault(slog.New(handler))
 }
 
 func buildUi() fyne.Window {
@@ -105,11 +124,6 @@ func buildUi() fyne.Window {
 	window.SetContent(content)
 
 	return window
-}
-
-func parseArgs() {
-	testCalendar = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
-	flag.Parse()
 }
 
 func refresh() {
