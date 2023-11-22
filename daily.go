@@ -56,10 +56,6 @@ func main() {
 		showSettings(dailyApp)
 	}
 
-	cronHandler := cron.New()
-	cronHandler.AddFunc("* * * * *", refresh)
-	cronHandler.Start()
-
 	window.ShowAndRun()
 }
 
@@ -119,6 +115,11 @@ func buildUi() fyne.Window {
 
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
 	window.SetContent(content)
+
+	cronHandler := cron.New()
+	cronHandler.AddFunc("* * * * *", refresh)
+	cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayLabel) })
+	cronHandler.Start()
 
 	return window
 }
