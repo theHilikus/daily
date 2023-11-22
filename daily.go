@@ -30,7 +30,6 @@ var (
 
 	eventSource EventSource
 	dailyApp    fyne.App
-	cronHandler *cron.Cron
 )
 
 const dayFormat = "Mon, Jan 02"
@@ -55,12 +54,6 @@ func main() {
 	} else {
 		slog.Info("Calendar config not found. Starting in Settings UI")
 		showSettings(dailyApp)
-	}
-
-	if cronHandler == nil {
-		cronHandler = cron.New()
-		cronHandler.AddFunc("* * * * *", refresh)
-		cronHandler.Start()
 	}
 
 	window.ShowAndRun()
@@ -123,11 +116,16 @@ func buildUi() fyne.Window {
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
 	window.SetContent(content)
 
+	cronHandler := cron.New()
+	cronHandler.AddFunc("* * * * *", refresh)
+	cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayLabel) })
+	cronHandler.Start()
+
 	return window
 }
 
 func refresh() {
-	slog.Info("Refreshing data around date " + displayDay.Format("2006-01-02"))
+	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02"))
 	eventsList.RemoveAll()
 	events, err := getEvents()
 	if err != nil {
@@ -204,7 +202,7 @@ func refresh() {
 }
 
 func notify(event *event, timeToStart time.Duration) {
-	slog.Debug("Sending notification for '" + event.title + "'")
+	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
 	notifBody := strconv.Itoa(remaining) + " minutes to event"
