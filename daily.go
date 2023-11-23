@@ -143,25 +143,15 @@ func refresh() {
 			eventColour = theme.DisabledColor()
 		} else if event.isStarted() {
 			//ongoing events
-			timeToEnd := time.Until(event.end).Round(time.Minute)
-			if int(timeToEnd.Hours()) > 0 {
-				eventText += " (" + fmt.Sprintf("%dh%dm", int(timeToEnd.Hours()), int(timeToEnd.Minutes())%60) + " remaining)"
-			} else {
-				eventText += " (" + fmt.Sprintf("%dm", int(timeToEnd.Minutes())) + " remaining)"
-			}
+			timeToEnd := time.Until(event.end)
+			eventText += " (" + createuserFriendlyDurationText(timeToEnd) + " remaining)"
 			eventStyle.Bold = true
 		} else {
 			//future events
-			timeToStart := time.Until(event.start).Round(time.Minute)
-			if timeToStart >= 0 {
-				if int(timeToStart.Hours()) > 0 {
-					eventText += " (in " + fmt.Sprintf("%dh%dm", int(timeToStart.Hours()), int(timeToStart.Minutes())%60) + ")"
-				} else {
-					eventText += " (in " + fmt.Sprintf("%dm", int(timeToStart.Minutes())) + ")"
-				}
-			}
+			timeToStart := time.Until(event.start)
+			eventText += " (in " + createuserFriendlyDurationText(timeToStart) + ")"
 
-			if int(timeToStart.Round(time.Minute).Minutes()) <= dailyApp.Preferences().IntWithFallback("notification-time", 1) {
+			if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
 				if event.notifiable {
 					notify(event, timeToStart)
 				} else {
@@ -199,6 +189,21 @@ func refresh() {
 		eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
 	}
 	eventsList.Refresh()
+}
+
+func createuserFriendlyDurationText(durationRemaining time.Duration) string {
+	if int(durationRemaining.Seconds())%60 > 0 {
+		//round up
+		durationRemaining = durationRemaining.Truncate(time.Minute) + 1*time.Minute
+	}
+	var result string
+	if int(durationRemaining.Hours()) > 0 {
+		result = fmt.Sprintf("%dh%dm", int(durationRemaining.Hours()), int(durationRemaining.Minutes())%60)
+	} else {
+		result = fmt.Sprintf("%dm", int(durationRemaining.Minutes()))
+	}
+
+	return result
 }
 
 func notify(event *event, timeToStart time.Duration) {
