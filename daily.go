@@ -144,12 +144,12 @@ func refresh() {
 		} else if event.isStarted() {
 			//ongoing events
 			timeToEnd := time.Until(event.end)
-			eventText += " (" + createuserFriendlyDurationText(timeToEnd) + " remaining)"
+			eventText += " (" + createUserFriendlyDurationText(timeToEnd) + " remaining)"
 			eventStyle.Bold = true
 		} else {
 			//future events
 			timeToStart := time.Until(event.start)
-			eventText += " (in " + createuserFriendlyDurationText(timeToStart) + ")"
+			eventText += " (in " + createUserFriendlyDurationText(timeToStart) + ")"
 
 			if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
 				if event.notifiable {
@@ -191,7 +191,7 @@ func refresh() {
 	eventsList.Refresh()
 }
 
-func createuserFriendlyDurationText(durationRemaining time.Duration) string {
+func createUserFriendlyDurationText(durationRemaining time.Duration) string {
 	if int(durationRemaining.Seconds())%60 > 0 {
 		//round up
 		durationRemaining = durationRemaining.Truncate(time.Minute) + 1*time.Minute

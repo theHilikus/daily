@@ -31,7 +31,7 @@ func TestDurationText(t *testing.T) {
 		if err != nil {
 			t.Fatal("Error parsing original test duration " + strconv.Itoa(i))
 		}
-		if actual := createuserFriendlyDurationText(duration); actual != test.expectedString {
+		if actual := createUserFriendlyDurationText(duration); actual != test.expectedString {
 			t.Errorf("%d. Actual %q doesn't match expected %q. Original was %q", i, actual, test.expectedString, test.originalDuration)
 		}
 	}
