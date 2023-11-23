@@ -23,10 +23,11 @@ import (
 )
 
 var (
-	displayDay   time.Time
-	eventsList   *fyne.Container
-	testCalendar = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
-	verbose      = flag.Bool("verbose", false, "Enable extra debug logs")
+	displayDay      time.Time
+	eventsList      *fyne.Container
+	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
+	verbose         = flag.Bool("verbose", false, "Enable extra debug logs")
+	lastEventUpdate time.Time
 
 	eventSource EventSource
 	dailyApp    fyne.App
@@ -37,7 +38,7 @@ const dayFormat = "Mon, Jan 02"
 // An entity that can retrieve calendar events
 type EventSource interface {
 	// Gets a slice of events for the particular day specified
-	getEvents(time.Time) ([]event, error)
+	getEvents(time.Time, bool) ([]event, error)
 }
 
 func main() {
@@ -226,10 +227,9 @@ func showSettings(dailyApp fyne.App) {
 }
 
 func changeDay(newDate time.Time, dayLabel *widget.Label) {
-	slog.Info("Changing day to " + newDate.Format(time.RFC3339))
+	slog.Info("Changing day to " + newDate.Format(dayFormat))
 	displayDay = newDate
 	dayLabel.SetText(displayDay.Format(dayFormat))
-	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
 	refresh()
 }
 
@@ -280,8 +280,13 @@ func getEvents() ([]event, error) {
 			}
 		}
 	}
+	fullRefresh := false
+	if time.Since(lastEventUpdate).Minutes() > float64(dailyApp.Preferences().IntWithFallback("calendar-update-interval", 5)) {
+		fullRefresh = true
+		lastEventUpdate = time.Now()
+	}
 
-	return eventSource.getEvents(displayDay)
+	return eventSource.getEvents(displayDay, fullRefresh)
 
 }
 
@@ -315,8 +320,8 @@ func newDummyEventSource() *dummyEventSource {
 	}
 }
 
-func (dummy dummyEventSource) getEvents(day time.Time) ([]event, error) {
-	slog.Debug("Returning dummy events")
+func (dummy dummyEventSource) getEvents(day time.Time, fullRefresh bool) ([]event, error) {
+	slog.Debug("Returning dummy events. Full refresh = " + strconv.FormatBool(fullRefresh))
 
 	var result []event
 	if isOnSameDay(dummy.originalNow, day) {
