@@ -23,10 +23,11 @@ import (
 )
 
 var (
-	displayDay   time.Time
-	eventsList   *fyne.Container
-	testCalendar = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
-	verbose      = flag.Bool("verbose", false, "Enable extra debug logs")
+	displayDay      time.Time
+	eventsList      *fyne.Container
+	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
+	verbose         = flag.Bool("verbose", false, "Enable extra debug logs")
+	lastFullRefresh time.Time
 
 	eventSource EventSource
 	dailyApp    fyne.App
@@ -37,7 +38,7 @@ const dayFormat = "Mon, Jan 02"
 // An entity that can retrieve calendar events
 type EventSource interface {
 	// Gets a slice of events for the particular day specified
-	getEvents(time.Time) ([]event, error)
+	getEvents(time.Time, bool) ([]event, bool, error)
 }
 
 func main() {
@@ -50,7 +51,7 @@ func main() {
 
 	calendarToken := dailyApp.Preferences().String("calendar-token")
 	if calendarToken != "" {
-		refresh()
+		refresh(true)
 	} else {
 		slog.Info("Calendar config not found. Starting in Settings UI")
 		showSettings(dailyApp)
@@ -98,7 +99,7 @@ func buildUi() fyne.Window {
 		})
 	}
 
-	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), refresh)
+	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { refresh(true) })
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
 	toolbar := container.NewHBox(layout.NewSpacer(), refreshButton, settingsButton)
 
@@ -117,17 +118,17 @@ func buildUi() fyne.Window {
 	window.SetContent(content)
 
 	cronHandler := cron.New()
-	cronHandler.AddFunc("* * * * *", refresh)
+	cronHandler.AddFunc("* * * * *", func() { refresh(false) })
 	cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayLabel) })
 	cronHandler.Start()
 
 	return window
 }
 
-func refresh() {
-	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02"))
+func refresh(fullRefresh bool) {
+	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh))
 	eventsList.RemoveAll()
-	events, err := getEvents()
+	events, err := getEvents(fullRefresh)
 	if err != nil {
 		slog.Error("Could not retrieve calendar events")
 		return
@@ -226,11 +227,10 @@ func showSettings(dailyApp fyne.App) {
 }
 
 func changeDay(newDate time.Time, dayLabel *widget.Label) {
-	slog.Info("Changing day to " + newDate.Format(time.RFC3339))
+	slog.Info("Changing day to " + newDate.Format(dayFormat))
 	displayDay = newDate
 	dayLabel.SetText(displayDay.Format(dayFormat))
-	slog.Debug("New day is " + displayDay.Format("2006-01-02"))
-	refresh()
+	refresh(false)
 }
 
 func isOnSameDay(one time.Time, other time.Time) bool {
@@ -267,7 +267,7 @@ func (otherEvent *event) isStarted() bool {
 	return otherEvent.start.Before(now) && otherEvent.end.After(now)
 }
 
-func getEvents() ([]event, error) {
+func getEvents(fullRefresh bool) ([]event, error) {
 	if eventSource == nil {
 		slog.Info("No event source found. Creating one")
 		if *testCalendar {
@@ -281,8 +281,19 @@ func getEvents() ([]event, error) {
 		}
 	}
 
-	return eventSource.getEvents(displayDay)
+	updateInterval := float64(dailyApp.Preferences().IntWithFallback("calendar-update-interval", 5))
+	if !fullRefresh && time.Since(lastFullRefresh).Minutes() > updateInterval {
+		slog.Debug("Overwriting fullRefresh because update interval ellapsed")
+		fullRefresh = true
+	}
 
+	events, fullRefreshed, err := eventSource.getEvents(displayDay, fullRefresh)
+
+	if fullRefreshed {
+		lastFullRefresh = time.Now()
+	}
+
+	return events, err
 }
 
 type dummyEventSource struct {
@@ -315,8 +326,8 @@ func newDummyEventSource() *dummyEventSource {
 	}
 }
 
-func (dummy dummyEventSource) getEvents(day time.Time) ([]event, error) {
-	slog.Debug("Returning dummy events")
+func (dummy dummyEventSource) getEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
+	slog.Debug("Returning dummy events. Full refresh = " + strconv.FormatBool(fullRefresh))
 
 	var result []event
 	if isOnSameDay(dummy.originalNow, day) {
@@ -329,5 +340,5 @@ func (dummy dummyEventSource) getEvents(day time.Time) ([]event, error) {
 		result = dummy.tomorrow
 	}
 
-	return result, nil
+	return result, fullRefresh, nil
 }
