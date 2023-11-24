@@ -61,14 +61,14 @@ func newGoogleCalendar() (*googleCalendar, error) {
 	return &result, nil
 }
 
-func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event, error) {
+func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
 	refreshed := false
 
 	if len(gcal.eventsBuffer) == 0 {
 		slog.Debug("Events buffer is empty")
 		err := gcal.retrieveEventsAround(day)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		refreshed = true
 	}
@@ -79,14 +79,14 @@ func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event,
 		slog.Debug("Too close to buffer start")
 		err := gcal.retrieveEventsAround(gcal.requestStartDate)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		refreshed = true
 	} else if int(gcal.requestEndDate.Sub(day).Hours()/24) < minBufferThreshold {
 		slog.Debug("Too close to buffer end")
 		err := gcal.retrieveEventsAround(gcal.requestEndDate)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		refreshed = true
 	}
@@ -95,8 +95,9 @@ func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event,
 		slog.Debug("Forcing retrieve of events")
 		err := gcal.retrieveEventsAround(day)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
+		refreshed = true
 	}
 
 	var result []event
@@ -106,7 +107,7 @@ func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event,
 		}
 	}
 
-	return result, nil
+	return result, refreshed, nil
 }
 
 func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
