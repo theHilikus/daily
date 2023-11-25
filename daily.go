@@ -150,9 +150,14 @@ func refresh(fullRefresh bool) {
 		}
 
 		reportUserError(userErrorMessage)
+		showNoEvents()
 		return
 	} else if !lastErrorButton.Hidden {
 		reportUserError("") // clear the error
+	}
+
+	if len(events) == 0 {
+		showNoEvents()
 	}
 
 	for pos := range events {
@@ -227,6 +232,12 @@ func reportUserError(errorMessage string) {
 	}
 }
 
+func showNoEvents() {
+	noEventsLabel := widget.NewLabel("No events today")
+	eventsList.Add(layout.NewSpacer())
+	eventsList.Add(container.NewCenter(noEventsLabel))
+	eventsList.Add(layout.NewSpacer())
+}
 
 func createUserFriendlyDurationText(durationRemaining time.Duration) string {
 	if int(durationRemaining.Seconds())%60 > 0 {
