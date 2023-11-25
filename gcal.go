@@ -127,7 +127,6 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	if err == nil {
 		slog.Debug("Retrieved " + strconv.Itoa(len(response.Items)) + " event(s) successfully")
 	} else {
-		slog.Error("Unable to retrieve events from google:", err)
 		return err
 	}
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
@@ -20,6 +22,7 @@ import (
 	"fyne.io/systray"
 	"github.com/robfig/cron/v3"
 	"github.com/theHilikus/daily/internal/ui"
+	"google.golang.org/api/googleapi"
 )
 
 var (
@@ -28,6 +31,7 @@ var (
 	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
 	verbose         = flag.Bool("verbose", false, "Enable extra debug logs")
 	lastFullRefresh time.Time
+	lastErrorButton *widget.Button
 
 	eventSource EventSource
 	dailyApp    fyne.App
@@ -99,9 +103,12 @@ func buildUi() fyne.Window {
 		})
 	}
 
+	lastErrorButton = widget.NewButtonWithIcon("", theme.WarningIcon(), func() {})
+	lastErrorButton.Importance = widget.DangerImportance
+	lastErrorButton.Hidden = true
 	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { refresh(true) })
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
-	toolbar := container.NewHBox(layout.NewSpacer(), refreshButton, settingsButton)
+	toolbar := container.NewHBox(layout.NewSpacer(), lastErrorButton, refreshButton, settingsButton)
 
 	dayLabel := widget.NewLabel(displayDay.Format(dayFormat))
 	dayLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -130,8 +137,22 @@ func refresh(fullRefresh bool) {
 	eventsList.RemoveAll()
 	events, err := getEvents(fullRefresh)
 	if err != nil {
-		slog.Error("Could not retrieve calendar events")
+		slog.Error("Could not retrieve calendar events", err)
+
+		userErrorMessage := "Could not retrieve calendar events:\n"
+		switch e := err.(type) {
+		case *googleapi.Error:
+			userErrorMessage += e.Message
+		case *url.Error:
+			userErrorMessage += e.Err.Error()
+		default:
+			userErrorMessage += err.Error()
+		}
+
+		reportUserError(userErrorMessage)
 		return
+	} else if !lastErrorButton.Hidden {
+		reportUserError("") // clear the error
 	}
 
 	for pos := range events {
@@ -189,8 +210,23 @@ func refresh(fullRefresh bool) {
 		}
 		eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
 	}
+
 	eventsList.Refresh()
 }
+
+func reportUserError(errorMessage string) {
+	if errorMessage != "" {
+		slog.Info("Reporting user error: " + errorMessage)
+		lastErrorButton.Hidden = false
+		lastErrorButton.OnTapped = func() {
+			dialog.ShowError(errors.New(errorMessage), dailyApp.Driver().AllWindows()[0])
+		}
+	} else {
+		slog.Info("Clearing last user error")
+		lastErrorButton.Hidden = true
+	}
+}
+
 
 func createUserFriendlyDurationText(durationRemaining time.Duration) string {
 	if int(durationRemaining.Seconds())%60 > 0 {
