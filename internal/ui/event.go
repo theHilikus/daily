@@ -24,7 +24,7 @@ func NewEvent(icon *widget.Icon,title *ClickableText, titleButtons []*widget.But
 	}
 
 	detail.Hide()
-	rootContainer := container.NewVBox(titleBox, detail, widget.NewSeparator())
+	rootContainer := container.NewVBox(container.NewPadded(titleBox), detail, widget.NewSeparator())
 	result := &Event{
 		Title:        title,
 		TitleButtons: titleButtons,
