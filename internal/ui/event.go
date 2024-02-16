@@ -17,8 +17,8 @@ type Event struct {
 	container    *fyne.Container
 }
 
-func NewEvent(title *ClickableText, titleButtons []*widget.Button, detail fyne.CanvasObject) *Event {
-	titleBox := container.NewHBox(title, layout.NewSpacer())
+func NewEvent(icon *widget.Icon,title *ClickableText, titleButtons []*widget.Button, detail fyne.CanvasObject) *Event {
+	titleBox := container.NewHBox(icon, title, layout.NewSpacer())
 	for _, button := range titleButtons {
 		titleBox.Add(button)
 	}

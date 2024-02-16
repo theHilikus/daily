@@ -187,15 +187,16 @@ func refresh(fullRefresh bool) {
 			}
 		}
 
+		var responseIcon *widget.Icon
 		switch event.response {
 		case needsAction:
-			eventText = "🚩 " + eventText
+			responseIcon = widget.NewIcon(ui.ResourceWarningPng)
 		case declined:
-			eventText = "❎ " + eventText
+			responseIcon = widget.NewIcon(ui.ResourceCancelPng)
 		case tentative:
-			eventText = "❓ " + eventText
+			responseIcon = widget.NewIcon(ui.ResourceQuestionPng)
 		case accepted:
-			eventText = "✅ " + eventText
+			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
 		}
 
 		title := ui.NewClickableText(eventText, eventStyle, eventColour)
@@ -213,7 +214,8 @@ func refresh(fullRefresh bool) {
 				buttons = append(buttons, meetingButton)
 			}
 		}
-		eventsList.Add(ui.NewEvent(title, buttons, widget.NewRichText(&details)))
+
+		eventsList.Add(ui.NewEvent(responseIcon, title, buttons, widget.NewRichText(&details)))
 	}
 
 	eventsList.Refresh()
