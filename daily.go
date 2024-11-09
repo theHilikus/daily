@@ -137,7 +137,7 @@ func refresh(fullRefresh bool) {
 	eventsList.RemoveAll()
 	events, err := getEvents(fullRefresh)
 	if err != nil {
-		slog.Error("Could not retrieve calendar events", err)
+		slog.Error("Could not retrieve calendar events", "error", err)
 
 		userErrorMessage := "Could not retrieve calendar events:\n"
 		switch e := err.(type) {
@@ -273,6 +273,40 @@ func notify(event *event, timeToStart time.Duration) {
 
 func showSettings(dailyApp fyne.App) {
 	slog.Info("Opening settings panel")
+
+	settingsWindow := dailyApp.NewWindow("Settings")
+	settingsWindow.Resize(fyne.NewSize(400, 200))
+	calendarIdLabel := widget.NewLabel("Calendar ID:")
+	calendarIdBox := widget.NewEntry()
+	calendarIdBox.Text = "primary"
+	var gCalToken string
+	connectButton := widget.NewButtonWithIcon("Google Calendar", ui.ResourceGoogleCalendarPng, func() {
+		var err error
+		gCalToken, err = startGCalOAuthFlow()
+		if err != nil {
+			dialog.ShowError(err, settingsWindow)
+			return
+		}
+	})
+
+	connectBox := container.NewHBox(connectButton, calendarIdLabel, calendarIdBox)
+
+	saveButton := widget.NewButton("Save", func() {
+		dailyApp.Preferences().SetString("calendar-token", gCalToken)
+		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
+		slog.Info("Preferences saved")
+		settingsWindow.Close()
+	})
+
+	content := container.NewVBox(
+		widget.NewLabel("Connect to"),
+		connectBox,
+		layout.NewSpacer(),
+		saveButton,
+	)
+
+	settingsWindow.SetContent(content)
+	settingsWindow.Show()
 }
 
 func changeDay(newDate time.Time, dayLabel *widget.Label) {
@@ -323,7 +357,7 @@ func getEvents(fullRefresh bool) ([]event, error) {
 			eventSource = newDummyEventSource()
 		} else {
 			var err error
-			eventSource, err = newGoogleCalendar()
+			eventSource, err = newGoogleCalendarEventSource()
 			if err != nil {
 				return nil, err
 			}
