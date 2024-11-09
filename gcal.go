@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -27,18 +32,99 @@ type googleCalendar struct {
 	requestEndDate   time.Time
 }
 
-func newGoogleCalendar() (*googleCalendar, error) {
-	result := googleCalendar{}
+func startGCalOAuthFlow() (string, error) {
+	slog.Info("Starting OAuth flow for Google Calendar")
 
-	clientSecret, err := os.ReadFile(clientSecretFile)
+	config, err := createOAuthConfig()
 	if err != nil {
-		slog.Error("Unable to read client secret file: ", err)
-		return nil, err
+		slog.Error("Failed to create config", "error", err)
+		return "", err
+	}
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		slog.Error("Failed to create listener", "error", err)
+		return "", err
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	config.RedirectURL = fmt.Sprintf("http://localhost:%d/callback", port)
+	state := generateRandomState()
+	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+
+	parsedURL, err := url.Parse(authURL)
+	if err != nil {
+		slog.Error("Failed to parse OAuth URL", "error", err)
+		return "", err
 	}
 
-	config, err := google.ConfigFromJSON(clientSecret, calendar.CalendarEventsReadonlyScope)
+	// Open the URL in the user's browser
+	err = dailyApp.OpenURL(parsedURL)
 	if err != nil {
-		slog.Error("Unable to parse client secret file to config: %v", err)
+		slog.Error("Failed to open OAuth URL", "error", err)
+		return "", err
+	}
+
+	done := make(chan bool)
+
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port)}
+	var tokenResult string
+	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("state") != state {
+			http.Error(w, "Invalid state", http.StatusBadRequest)
+			return
+		}
+
+		code := r.URL.Query().Get("code")
+		token, err := config.Exchange(context.Background(), code)
+		if err != nil {
+			http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
+			return
+		}
+
+		slog.Info("Authentication successful!")
+
+		tokenJSON, err := json.Marshal(token)
+		if err != nil {
+			http.Error(w, "Failed to marshal token", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body><h1>Authentication Complete</h1></body></html>"))
+
+		done <- true
+		go server.Shutdown(context.Background())
+
+		tokenResult = string(tokenJSON)
+	})
+
+	go func() {
+		if err := server.Serve(listener); err != http.ErrServerClosed {
+			slog.Error("Server error", "error", err)
+		}
+		done <- true
+	}()
+
+	<-done // Wait for the callback to complete
+
+	return tokenResult, nil
+}
+
+func generateRandomState() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		slog.Error("Failed to generate random state", "error", err)
+		return ""
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+func newGoogleCalendarEventSource() (*googleCalendar, error) {
+	result := googleCalendar{}
+
+	config, err := createOAuthConfig()
+	if err != nil {
 		return nil, err
 	}
 
@@ -55,10 +141,26 @@ func newGoogleCalendar() (*googleCalendar, error) {
 	ctx := context.Background()
 	result.service, err = calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		slog.Error("Unable to retrieve Calendar client: %v", err)
+		slog.Error("Unable to retrieve Calendar client", "error", err)
 	}
 
 	return &result, nil
+}
+
+func createOAuthConfig() (*oauth2.Config, error) {
+	clientSecret, err := os.ReadFile(clientSecretFile)
+	if err != nil {
+		slog.Error("Unable to read client secret file: ", "error", err)
+		return nil, err
+	}
+
+	config, err := google.ConfigFromJSON(clientSecret, calendar.CalendarEventsReadonlyScope)
+	if err != nil {
+		slog.Error("Unable to parse client secret file to config: %v", "error", err)
+		return nil, err
+	}
+
+	return config, nil
 }
 
 func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
@@ -115,8 +217,9 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	const requestHalfWindow int = 5
 	gcal.requestStartDate = day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	gcal.requestEndDate = day.AddDate(0, 0, requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
-	slog.Info("Retrieving events between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339))
-	response, err := gcal.service.Events.List(dailyApp.Preferences().String("calendar-id")).
+	calendarId := dailyApp.Preferences().String("calendar-id")
+	slog.Info("Retrieving events between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339) + " for calendarId = " + calendarId)
+	response, err := gcal.service.Events.List(calendarId).
 		SingleEvents(true).
 		TimeMin(gcal.requestStartDate.Format(time.RFC3339)).
 		TimeMax(gcal.requestEndDate.Format(time.RFC3339)).
