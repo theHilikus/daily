@@ -172,7 +172,7 @@ func refresh(fullRefresh bool) {
 		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
 		if event.isFinished() {
 			//past events
-			eventColour = theme.DisabledColor()
+			eventColour = theme.DefaultTheme().Color(theme.ColorNameDisabled, theme.VariantLight)
 		} else if event.isStarted() {
 			//ongoing events
 			timeToEnd := time.Until(event.end)
