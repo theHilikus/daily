@@ -200,7 +200,7 @@ func refresh(fullRefresh bool) {
 			responseIcon = widget.NewIcon(ui.ResourceCancelPng)
 		case tentative:
 			responseIcon = widget.NewIcon(ui.ResourceQuestionPng)
-		case accepted:
+		case accepted, empty:
 			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
 		}
 
@@ -340,6 +340,7 @@ type event struct {
 type responseStatus string
 
 const (
+	empty       responseStatus = ""
 	needsAction responseStatus = "needsAction"
 	declined    responseStatus = "declined"
 	tentative   responseStatus = "tentative"
