@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"encoding/base64"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"
@@ -21,7 +22,6 @@ import (
 )
 
 const (
-	tokenFile        = "gcalToken.json"
 	clientSecretFile = "secrets/client.json"
 )
 
@@ -33,7 +33,7 @@ type googleCalendar struct {
 }
 
 func startGCalOAuthFlow() (string, error) {
-	slog.Info("Starting OAuth flow for Google Calendar")
+	slog.Info("Starting PKCE OAuth flow for Google Calendar")
 
 	config, err := createOAuthConfig()
 	if err != nil {
@@ -48,8 +48,19 @@ func startGCalOAuthFlow() (string, error) {
 	port := listener.Addr().(*net.TCPAddr).Port
 
 	config.RedirectURL = fmt.Sprintf("http://localhost:%d/callback", port)
-	state := generateRandomState()
-	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	state, err := generateRandomURLSafeString(16)
+	if err != nil {
+		slog.Error("Failed to generate state", "error", err)
+		return "", err
+	}
+	slog.Debug("Generated state: " + state)
+	codeVerifier, err := generateRandomURLSafeString(32)
+	if err != nil {
+		slog.Error("Failed to generate code verifier: %v", err)
+		return "", err
+	}
+	codeChallenge := oauth2.S256ChallengeOption(codeVerifier)
+	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline, codeChallenge)
 
 	parsedURL, err := url.Parse(authURL)
 	if err != nil {
@@ -70,14 +81,16 @@ func startGCalOAuthFlow() (string, error) {
 	var tokenResult string
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state") != state {
+			slog.Error("State in callback didn't match original")
 			http.Error(w, "Invalid state", http.StatusBadRequest)
 			return
 		}
 
 		code := r.URL.Query().Get("code")
-		token, err := config.Exchange(context.Background(), code)
+		token, err := config.Exchange(context.Background(), code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
 		if err != nil {
 			http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
+			slog.Error("Token exchange failed", "error", err, "scopes", config.Scopes, "redirect_uri", config.RedirectURL)
 			return
 		}
 
@@ -110,14 +123,12 @@ func startGCalOAuthFlow() (string, error) {
 	return tokenResult, nil
 }
 
-func generateRandomState() string {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		slog.Error("Failed to generate random state", "error", err)
-		return ""
+func generateRandomURLSafeString(byteLength int) (string, error) {
+	b := make([]byte, byteLength)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%x", b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func newGoogleCalendarEventSource() (*googleCalendar, error) {
