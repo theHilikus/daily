@@ -9,4 +9,5 @@ fyne bundle -o internal/ui/bundled.go --package ui --prefix Resource --append in
 ```
 
 # Credits
-Calendar icons made by [Freepik](https://www.flaticon.com/authors/freepik) from [Flaticon](www.flaticon.com)
+Calendar icons made by [Freepik](https://www.flaticon.com/authors/freepik) from [Flaticon](www.flaticon.com)  
+Google calendar icons created by [Freepik - Flaticon](https://www.flaticon.com/free-icons/google-calendar)

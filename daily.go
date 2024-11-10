@@ -133,11 +133,16 @@ func buildUi() fyne.Window {
 }
 
 func refresh(fullRefresh bool) {
+	if dailyApp.Preferences().String("calendar-token") == "" {
+		slog.Warn("Not refreshing. No calendar-token found")
+		return
+	}
+
 	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh))
 	eventsList.RemoveAll()
 	events, err := getEvents(fullRefresh)
 	if err != nil {
-		slog.Error("Could not retrieve calendar events", err)
+		slog.Error("Could not retrieve calendar events", "error", err)
 
 		userErrorMessage := "Could not retrieve calendar events:\n"
 		switch e := err.(type) {
@@ -167,7 +172,7 @@ func refresh(fullRefresh bool) {
 		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
 		if event.isFinished() {
 			//past events
-			eventColour = theme.DisabledColor()
+			eventColour = theme.DefaultTheme().Color(theme.ColorNameDisabled, theme.VariantLight)
 		} else if event.isStarted() {
 			//ongoing events
 			timeToEnd := time.Until(event.end)
@@ -195,7 +200,7 @@ func refresh(fullRefresh bool) {
 			responseIcon = widget.NewIcon(ui.ResourceCancelPng)
 		case tentative:
 			responseIcon = widget.NewIcon(ui.ResourceQuestionPng)
-		case accepted:
+		case accepted, empty:
 			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
 		}
 
@@ -273,6 +278,40 @@ func notify(event *event, timeToStart time.Duration) {
 
 func showSettings(dailyApp fyne.App) {
 	slog.Info("Opening settings panel")
+
+	settingsWindow := dailyApp.NewWindow("Settings")
+	settingsWindow.Resize(fyne.NewSize(400, 200))
+	calendarIdLabel := widget.NewLabel("Calendar ID:")
+	calendarIdBox := widget.NewEntry()
+	calendarIdBox.Text = "primary"
+	var gCalToken string
+	connectButton := widget.NewButtonWithIcon("Google Calendar", ui.ResourceGoogleCalendarPng, func() {
+		var err error
+		gCalToken, err = startGCalOAuthFlow()
+		if err != nil {
+			dialog.ShowError(err, settingsWindow)
+			return
+		}
+	})
+
+	connectBox := container.NewHBox(connectButton, calendarIdLabel, calendarIdBox)
+
+	saveButton := widget.NewButton("Save", func() {
+		dailyApp.Preferences().SetString("calendar-token", gCalToken)
+		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
+		slog.Info("Preferences saved")
+		settingsWindow.Close()
+	})
+
+	content := container.NewVBox(
+		widget.NewLabel("Connect to"),
+		connectBox,
+		layout.NewSpacer(),
+		saveButton,
+	)
+
+	settingsWindow.SetContent(content)
+	settingsWindow.Show()
 }
 
 func changeDay(newDate time.Time, dayLabel *widget.Label) {
@@ -301,6 +340,7 @@ type event struct {
 type responseStatus string
 
 const (
+	empty       responseStatus = ""
 	needsAction responseStatus = "needsAction"
 	declined    responseStatus = "declined"
 	tentative   responseStatus = "tentative"
@@ -323,7 +363,7 @@ func getEvents(fullRefresh bool) ([]event, error) {
 			eventSource = newDummyEventSource()
 		} else {
 			var err error
-			eventSource, err = newGoogleCalendar()
+			eventSource, err = newGoogleCalendarEventSource()
 			if err != nil {
 				return nil, err
 			}
