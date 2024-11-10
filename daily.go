@@ -133,6 +133,11 @@ func buildUi() fyne.Window {
 }
 
 func refresh(fullRefresh bool) {
+	if dailyApp.Preferences().String("calendar-token") == "" {
+		slog.Warn("Not refreshing. No calendar-token found")
+		return
+	}
+
 	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh))
 	eventsList.RemoveAll()
 	events, err := getEvents(fullRefresh)
