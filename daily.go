@@ -39,7 +39,7 @@ var (
 
 const dayFormat = "Mon, Jan 02"
 
-// An entity that can retrieve calendar events
+// EventSource An entity that can retrieve calendar events
 type EventSource interface {
 	// Gets a slice of events for the particular day specified
 	getEvents(time.Time, bool) ([]event, bool, error)
@@ -67,8 +67,8 @@ func main() {
 func configureLog() {
 	replacer := func(groups []string, attr slog.Attr) slog.Attr {
 		if attr.Key == slog.TimeKey {
-			time := attr.Value.Time()
-			return slog.String("time", time.Format("15:04:05.000"))
+			t := attr.Value.Time()
+			return slog.String("time", t.Format("15:04:05.000"))
 		}
 		return attr
 	}
@@ -125,8 +125,18 @@ func buildUi() fyne.Window {
 	window.SetContent(content)
 
 	cronHandler := cron.New()
-	cronHandler.AddFunc("* * * * *", func() { refresh(false) })
-	cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayLabel) })
+	_, err := cronHandler.AddFunc("* * * * *", func() {
+		fyne.Do(func() {
+			refresh(false)
+		})
+	})
+	if err != nil {
+		slog.Error("Could not add cron job", "error", err)
+	}
+	_, err2 := cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayLabel) })
+	if err2 != nil {
+		slog.Error("Could not add cron job", "error", err2)
+	}
 	cronHandler.Start()
 
 	return window
@@ -212,7 +222,13 @@ func refresh(fullRefresh bool) {
 		if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
 			locationUrl, err := url.Parse(event.location)
 			if err == nil {
-				meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() { dailyApp.OpenURL(locationUrl) })
+				meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() {
+					err := dailyApp.OpenURL(locationUrl)
+					if err != nil {
+						slog.Error("Could not open meeting URL", "error", err)
+						return
+					}
+				})
 				if event.isFinished() {
 					meetingButton.Disable()
 				}

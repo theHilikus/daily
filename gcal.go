@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -103,16 +104,23 @@ func startGCalOAuthFlow() (string, error) {
 		}
 
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte("<html><body><h1>Authentication Complete</h1></body></html>"))
+		_, err = w.Write([]byte("<html><body><h1>Authentication Complete</h1>You can close this window and go back to the app</body></html>"))
+		if err != nil {
+			return
+		}
 
-		done <- true
-		go server.Shutdown(context.Background())
+		go func() {
+			err := server.Shutdown(context.Background())
+			if err != nil {
+				slog.Error("Server shutdown error", "error", err)
+			}
+		}()
 
 		tokenResult = string(tokenJSON)
 	})
 
 	go func() {
-		if err := server.Serve(listener); err != http.ErrServerClosed {
+		if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Server error", "error", err)
 		}
 		done <- true
