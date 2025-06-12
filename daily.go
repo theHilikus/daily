@@ -110,15 +110,18 @@ func buildUi() fyne.Window {
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
 	toolbar := container.NewHBox(layout.NewSpacer(), lastErrorButton, refreshButton, settingsButton)
 
-	dayLabel := widget.NewLabel(displayDay.Format(dayFormat))
-	dayLabel.TextStyle = fyne.TextStyle{Bold: true}
-	dayBar := container.NewHBox(layout.NewSpacer(), dayLabel, layout.NewSpacer())
+	var dayButton *widget.Button
+	dayButton = widget.NewButton(displayDay.Format(dayFormat), func() {
+		changeDay(time.Now(), dayButton)
+	})
+	dayButton.Importance = widget.HighImportance
+	dayBar := container.NewHBox(layout.NewSpacer(), dayButton, layout.NewSpacer())
 	topBar := container.NewVBox(toolbar, dayBar)
 
 	eventsList = container.NewVBox()
 
-	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(displayDay.AddDate(0, 0, -1), dayLabel) })
-	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayLabel) })
+	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(displayDay.AddDate(0, 0, -1), dayButton) })
+	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayButton) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
 	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
@@ -133,7 +136,7 @@ func buildUi() fyne.Window {
 	if err != nil {
 		slog.Error("Could not add cron job", "error", err)
 	}
-	_, err2 := cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayLabel) })
+	_, err2 := cronHandler.AddFunc("0 0 * * *", func() { changeDay(time.Now(), dayButton) })
 	if err2 != nil {
 		slog.Error("Could not add cron job", "error", err2)
 	}
@@ -330,10 +333,10 @@ func showSettings(dailyApp fyne.App) {
 	settingsWindow.Show()
 }
 
-func changeDay(newDate time.Time, dayLabel *widget.Label) {
+func changeDay(newDate time.Time, dayButton *widget.Button) {
 	slog.Info("Changing day to " + newDate.Format(dayFormat))
 	displayDay = newDate
-	dayLabel.SetText(displayDay.Format(dayFormat))
+	dayButton.SetText(displayDay.Format(dayFormat))
 	refresh(false)
 }
 
