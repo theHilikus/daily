@@ -1,5 +1,9 @@
 # Daily
-A simple application to visualize your daily calendar in a single shot
+
+Daily is a minimalist desktop application that provides a quick glance at your day's schedule. It integrates with Google
+Calendar to show your upcoming events in a clean, compact interface that sits in your system tray. With Daily, you can
+stay on top of your schedule without constantly checking your calendar.
+
 
 # Development
 ## Adding icons to bundle
@@ -9,5 +13,4 @@ fyne bundle -o internal/ui/bundled.go --package ui --prefix Resource --append in
 ```
 
 # Credits
-Calendar icons made by [Freepik](https://www.flaticon.com/authors/freepik) from [Flaticon](www.flaticon.com)  
-Google calendar icons created by [Freepik - Flaticon](https://www.flaticon.com/free-icons/google-calendar)
+Calendar icons made by [Freepik](https://www.flaticon.com/authors/freepik) from [Flaticon](https://www.flaticon.com)  
