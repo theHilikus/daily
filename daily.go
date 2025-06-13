@@ -409,6 +409,9 @@ func getEvents(fullRefresh bool) ([]event, error) {
 			if err != nil {
 				return nil, err
 			}
+			if calendarToken == "" {
+				return nil, errors.New("empty token")
+			}
 			eventSource, err = newGoogleCalendarEventSource(calendarToken)
 			if err != nil {
 				return nil, err
