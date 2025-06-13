@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -336,10 +337,18 @@ func showSettings(dailyApp fyne.App) {
 		settingsWindow.Close()
 	})
 
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		slog.Error("Could not read build info")
+		info = &debug.BuildInfo{}
+		info.Main.Version = "Unknown"
+	}
+	versionLabel := widget.NewLabel("Version: " + info.Main.Version)
 	content := container.NewVBox(
 		widget.NewLabel("Connect to"),
 		connectBox,
 		layout.NewSpacer(),
+		versionLabel,
 		saveButton,
 	)
 
