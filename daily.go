@@ -33,6 +33,7 @@ var (
 	verbose         = flag.Bool("verbose", false, "Enable extra debug logs")
 	lastFullRefresh time.Time
 	lastErrorButton *widget.Button
+	settingsWindow  fyne.Window
 
 	eventSource EventSource
 	dailyApp    fyne.App
@@ -296,9 +297,18 @@ func notify(event *event, timeToStart time.Duration) {
 }
 
 func showSettings(dailyApp fyne.App) {
+	if settingsWindow != nil {
+		settingsWindow.Show()
+		return
+	}
+
 	slog.Info("Opening settings panel")
 
-	settingsWindow := dailyApp.NewWindow("Settings")
+	settingsWindow = dailyApp.NewWindow("Settings")
+	settingsWindow.SetOnClosed(func() {
+		settingsWindow = nil
+	})
+
 	settingsWindow.Resize(fyne.NewSize(400, 200))
 	calendarIdLabel := widget.NewLabel("Calendar ID:")
 	calendarIdBox := widget.NewEntry()
