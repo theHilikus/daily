@@ -8,15 +8,18 @@ require (
 	fyne.io/fyne/v2 v2.6.1
 	fyne.io/systray v1.11.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/oauth2 v0.30.0
 	google.golang.org/api v0.236.0
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	cloud.google.com/go/auth v0.16.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.7.0 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
+	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
