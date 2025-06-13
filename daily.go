@@ -22,6 +22,7 @@ import (
 	"fyne.io/systray"
 	"github.com/robfig/cron/v3"
 	"github.com/theHilikus/daily/internal/ui"
+	"github.com/zalando/go-keyring"
 	"google.golang.org/api/googleapi"
 )
 
@@ -53,8 +54,8 @@ func main() {
 
 	window := buildUi()
 
-	calendarToken := dailyApp.Preferences().String("calendar-token")
-	if calendarToken != "" {
+	calendarId := dailyApp.Preferences().String("calendar-id")
+	if calendarId != "" {
 		refresh(true)
 	} else {
 		slog.Info("Calendar config not found. Starting in Settings UI")
@@ -146,15 +147,14 @@ func buildUi() fyne.Window {
 }
 
 func refresh(fullRefresh bool) {
-	if dailyApp.Preferences().String("calendar-token") == "" {
-		slog.Warn("Not refreshing. No calendar-token found")
-		return
-	}
-
 	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh))
 	eventsList.RemoveAll()
 	events, err := getEvents(fullRefresh)
 	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			slog.Warn("Not refreshing. No calendar-token found")
+			return
+		}
 		slog.Error("Could not retrieve calendar events", "error", err)
 
 		userErrorMessage := "Could not retrieve calendar events:\n"
@@ -316,7 +316,11 @@ func showSettings(dailyApp fyne.App) {
 	connectBox := container.NewHBox(connectButton, calendarIdLabel, calendarIdBox)
 
 	saveButton := widget.NewButton("Save", func() {
-		dailyApp.Preferences().SetString("calendar-token", gCalToken)
+		err := keyring.Set("theHilikus-daily-app", "calendar-token", gCalToken)
+		if err != nil {
+			slog.Error("Could not save calendar token", "error", err)
+			return
+		}
 		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
 		slog.Info("Preferences saved")
 		settingsWindow.Close()
@@ -382,7 +386,11 @@ func getEvents(fullRefresh bool) ([]event, error) {
 			eventSource = newDummyEventSource()
 		} else {
 			var err error
-			eventSource, err = newGoogleCalendarEventSource()
+			calendarToken, err := keyring.Get("theHilikus-daily-app", "calendar-token")
+			if err != nil {
+				return nil, err
+			}
+			eventSource, err = newGoogleCalendarEventSource(calendarToken)
 			if err != nil {
 				return nil, err
 			}
@@ -391,7 +399,7 @@ func getEvents(fullRefresh bool) ([]event, error) {
 
 	updateInterval := float64(dailyApp.Preferences().IntWithFallback("calendar-update-interval", 5))
 	if !fullRefresh && time.Since(lastFullRefresh).Minutes() > updateInterval {
-		slog.Debug("Overwriting fullRefresh because update interval ellapsed")
+		slog.Debug("Overwriting fullRefresh because update interval elapsed")
 		fullRefresh = true
 	}
 

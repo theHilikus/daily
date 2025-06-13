@@ -139,7 +139,7 @@ func generateRandomURLSafeString(byteLength int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func newGoogleCalendarEventSource() (*googleCalendar, error) {
+func newGoogleCalendarEventSource(calendarToken string) (*googleCalendar, error) {
 	result := googleCalendar{}
 
 	config, err := createOAuthConfig()
@@ -148,7 +148,7 @@ func newGoogleCalendarEventSource() (*googleCalendar, error) {
 	}
 
 	tok := &oauth2.Token{}
-	tokenReader := strings.NewReader(dailyApp.Preferences().String("calendar-token"))
+	tokenReader := strings.NewReader(calendarToken)
 	err = json.NewDecoder(tokenReader).Decode(tok)
 	if err != nil {
 		slog.Error("Error decoding token")
