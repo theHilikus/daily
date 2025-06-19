@@ -268,6 +268,7 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 			}
 
 			newEvent := event{
+				id:         item.Id,
 				title:      item.Summary,
 				start:      eventStart,
 				end:        eventEnd,

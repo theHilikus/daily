@@ -23,7 +23,7 @@ func main() {
 	button1 := widget.NewButton("but1", func() { fmt.Println("button1") })
 	button2 := widget.NewButton("but2", func() { fmt.Println("button2") })
 
-	sample := ui.NewEvent(title, []*widget.Button{button1, button2}, widget.NewRichText(&details))
+	sample := ui.NewEvent("id1", nil, title, []*widget.Button{button1, button2}, widget.NewRichText(&details))
 	window.SetContent(sample)
 	window.ShowAndRun()
 }
