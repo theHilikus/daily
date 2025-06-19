@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -22,9 +22,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-const (
-	clientSecretFile = "secrets/client.json"
-)
+//go:embed secrets/client.json
+var clientSecret []byte
 
 type googleCalendar struct {
 	service          *calendar.Service
@@ -167,12 +166,6 @@ func newGoogleCalendarEventSource(calendarToken string) (*googleCalendar, error)
 }
 
 func createOAuthConfig() (*oauth2.Config, error) {
-	clientSecret, err := os.ReadFile(clientSecretFile)
-	if err != nil {
-		slog.Error("Unable to read client secret file: ", "error", err)
-		return nil, err
-	}
-
 	config, err := google.ConfigFromJSON(clientSecret, calendar.CalendarEventsReadonlyScope)
 	if err != nil {
 		slog.Error("Unable to parse client secret file to config: %v", "error", err)
