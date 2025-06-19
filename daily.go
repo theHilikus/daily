@@ -155,6 +155,16 @@ func refresh(forceRetrieve bool) {
 	} else {
 		slog.Debug(msg)
 	}
+
+	expandedState := make(map[string]bool)
+	for _, obj := range eventsList.Objects {
+		if eventWidget, ok := obj.(*ui.Event); ok {
+			if eventWidget.IsOpen() {
+				expandedState[eventWidget.Id] = true
+			}
+		}
+	}
+
 	eventsList.RemoveAll()
 	events, err := getEvents(forceRetrieve)
 	if err != nil {
@@ -251,6 +261,9 @@ func refresh(forceRetrieve bool) {
 		}
 
 		eventWidget := ui.NewEvent(event.id, responseIcon, title, buttons, widget.NewRichText(&details))
+		if expandedState[eventWidget.Id] {
+			eventWidget.Open()
+		}
 		eventsList.Add(eventWidget)
 	}
 
