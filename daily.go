@@ -187,21 +187,22 @@ func refresh(fullRefresh bool) {
 
 	for pos := range events {
 		event := &events[pos]
-		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ") + event.title
+		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ")
 		eventStyle := fyne.TextStyle{}
 		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
 		if event.isFinished() {
 			//past events
+			eventText += event.title
 			eventColour = theme.DefaultTheme().Color(theme.ColorNameDisabled, theme.VariantLight)
 		} else if event.isStarted() {
 			//ongoing events
 			timeToEnd := time.Until(event.end)
-			eventText += " (" + createUserFriendlyDurationText(timeToEnd) + " remaining)"
+			eventText += "(" + createUserFriendlyDurationText(timeToEnd) + " left) " + event.title
 			eventStyle.Bold = true
 		} else {
 			//future events
 			timeToStart := time.Until(event.start)
-			eventText += " (in " + createUserFriendlyDurationText(timeToStart) + ")"
+			eventText += "(in " + createUserFriendlyDurationText(timeToStart) + ") " + event.title
 
 			if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
 				if event.notifiable {
