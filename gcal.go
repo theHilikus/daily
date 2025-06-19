@@ -175,7 +175,7 @@ func createOAuthConfig() (*oauth2.Config, error) {
 	return config, nil
 }
 
-func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
+func (gcal *googleCalendar) getEvents(day time.Time, forceRetrieve bool) ([]event, bool, error) {
 	refreshed := false
 
 	if len(gcal.eventsBuffer) == 0 {
@@ -205,8 +205,8 @@ func (gcal *googleCalendar) getEvents(day time.Time, fullRefresh bool) ([]event,
 		refreshed = true
 	}
 
-	if fullRefresh && !refreshed {
-		slog.Debug("Forcing retrieve of events")
+	if forceRetrieve && !refreshed {
+		slog.Debug("Forcing retrieval of events")
 		err := gcal.retrieveEventsAround(day)
 		if err != nil {
 			return nil, false, err
@@ -230,7 +230,7 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	gcal.requestStartDate = day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	gcal.requestEndDate = day.AddDate(0, 0, requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	calendarId := dailyApp.Preferences().String("calendar-id")
-	slog.Info("Retrieving events between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339) + " for calendarId = " + calendarId)
+	slog.Info("Retrieving events from gCal between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339) + " for calendarId = " + calendarId)
 	response, err := gcal.service.Events.List(calendarId).
 		SingleEvents(true).
 		TimeMin(gcal.requestStartDate.Format(time.RFC3339)).

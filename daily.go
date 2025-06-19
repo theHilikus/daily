@@ -148,15 +148,15 @@ func buildUi() fyne.Window {
 	return window
 }
 
-func refresh(fullRefresh bool) {
-	msg := "Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh)
-	if fullRefresh {
+func refresh(forceRetrieve bool) {
+	msg := "Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Force retrieve = " + strconv.FormatBool(forceRetrieve)
+	if forceRetrieve {
 		slog.Info(msg)
 	} else {
 		slog.Debug(msg)
 	}
 	eventsList.RemoveAll()
-	events, err := getEvents(fullRefresh)
+	events, err := getEvents(forceRetrieve)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			slog.Warn("Not refreshing. No calendar-token found")
@@ -408,7 +408,7 @@ func (otherEvent *event) isStarted() bool {
 	return otherEvent.start.Before(now) && otherEvent.end.After(now)
 }
 
-func getEvents(fullRefresh bool) ([]event, error) {
+func getEvents(forceRetrieve bool) ([]event, error) {
 	if eventSource == nil {
 		slog.Info("No event source found. Creating one")
 		if *testCalendar {
@@ -430,12 +430,12 @@ func getEvents(fullRefresh bool) ([]event, error) {
 	}
 
 	updateInterval := float64(dailyApp.Preferences().IntWithFallback("calendar-update-interval", 5))
-	if !fullRefresh && time.Since(lastFullRefresh).Minutes() > updateInterval {
-		slog.Debug("Overwriting fullRefresh because update interval elapsed")
-		fullRefresh = true
+	if !forceRetrieve && time.Since(lastFullRefresh).Minutes() > updateInterval {
+		slog.Debug("Overwriting forceRetrieve because update interval elapsed")
+		forceRetrieve = true
 	}
 
-	events, fullRefreshed, err := eventSource.getEvents(displayDay, fullRefresh)
+	events, fullRefreshed, err := eventSource.getEvents(displayDay, forceRetrieve)
 
 	if fullRefreshed {
 		lastFullRefresh = time.Now()
