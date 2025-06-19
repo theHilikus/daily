@@ -149,7 +149,12 @@ func buildUi() fyne.Window {
 }
 
 func refresh(fullRefresh bool) {
-	slog.Info("Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh))
+	msg := "Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Full Refresh = " + strconv.FormatBool(fullRefresh)
+	if fullRefresh {
+		slog.Info(msg)
+	} else {
+		slog.Debug(msg)
+	}
 	eventsList.RemoveAll()
 	events, err := getEvents(fullRefresh)
 	if err != nil {
@@ -201,6 +206,7 @@ func refresh(fullRefresh bool) {
 			if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
 				if event.notifiable {
 					notify(event, timeToStart)
+					event.notified = true
 				} else {
 					slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
 				}
@@ -236,6 +242,8 @@ func refresh(fullRefresh bool) {
 				})
 				if event.isFinished() {
 					meetingButton.Disable()
+				} else if event.notified || event.isStarted() {
+					meetingButton.Importance = widget.HighImportance
 				}
 				buttons = append(buttons, meetingButton)
 			}
@@ -376,6 +384,7 @@ type event struct {
 	location   string
 	details    string
 	notifiable bool
+	notified   bool
 	response   responseStatus
 }
 
@@ -454,7 +463,7 @@ func newDummyEventSource() *dummyEventSource {
 			{title: "past event", location: "location1", details: "details1", start: start1, end: end1, response: accepted},
 			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour), response: declined},
 			{title: "current event", location: "location3", details: "detauls3", start: now.Add(-10 * time.Minute), end: now.Add(30 * time.Minute), response: declined},
-			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Hour), response: tentative},
+			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Minute), response: tentative},
 			{title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
 			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true, response: accepted},
 		},
