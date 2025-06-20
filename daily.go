@@ -199,11 +199,11 @@ func refresh(forceRetrieve bool) {
 		event := &events[pos]
 		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ")
 		eventStyle := fyne.TextStyle{}
-		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
+		eventColour := theme.ColorNameForeground
 		if event.isFinished() {
 			//past events
 			eventText += event.title
-			eventColour = theme.DefaultTheme().Color(theme.ColorNameDisabled, theme.VariantLight)
+			eventColour = theme.ColorNameDisabled
 		} else if event.isStarted() {
 			//ongoing events
 			timeToEnd := time.Until(event.end)
@@ -260,7 +260,9 @@ func refresh(forceRetrieve bool) {
 			}
 		}
 
-		eventWidget := ui.NewEvent(event.id, responseIcon, title, buttons, widget.NewRichText(&details))
+		detailsWidget := widget.NewRichText(&details)
+		detailsWidget.Wrapping = fyne.TextWrapWord
+		eventWidget := ui.NewEvent(event.id, responseIcon, title, buttons, detailsWidget)
 		if expandedState[eventWidget.Id] {
 			eventWidget.Open()
 		}
@@ -480,7 +482,7 @@ func newDummyEventSource() *dummyEventSource {
 			{id: "3", title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour), response: declined},
 			{id: "4", title: "current event", location: "location3", details: "detauls3", start: now.Add(-10 * time.Minute), end: now.Add(30 * time.Minute), response: declined},
 			{id: "5", title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Minute), response: tentative},
-			{id: "6", title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
+			{id: "6", title: "future event today", location: "location5", details: "details5 with very long text that might need wrapping because it is so long", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
 			{id: "7", title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true, response: accepted},
 		},
 		tomorrow: []event{

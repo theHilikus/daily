@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
-	"image/color"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/theHilikus/daily/internal/ui"
 )
@@ -16,15 +15,16 @@ func main() {
 	window.Resize(fyne.NewSize(400, 600))
 
 	details := widget.TextSegment{
-		Text: "Details",
+		Text: "Details that are very long and will wrap because of that. The message is so long that it will wrap.",
 	}
 
-	blue := color.RGBA{B: 255, A: 255}
-	title := ui.NewClickableText("hello this is a veeeeeeeeeery long liiiiiiiiiiiinnnneeeeeeeeeeee", fyne.TextStyle{Bold: true}, blue)
+	title := ui.NewClickableText("hello this is a veeeeeeeeeery long liiiiiiiiiiiinnnneeeeeeeeeeee", fyne.TextStyle{Bold: true}, theme.ColorNameForeground)
 	button1 := widget.NewButton("but1", func() { fmt.Println("button1") })
 	button2 := widget.NewButton("but2", func() { fmt.Println("button2") })
 
-	sample := ui.NewEvent("id1", nil, title, []*widget.Button{button1, button2}, widget.NewRichText(&details))
+	detail := widget.NewRichText(&details)
+	detail.Wrapping = fyne.TextWrapWord
+	sample := ui.NewEvent("id1", nil, title, []*widget.Button{button1, button2}, detail)
 	window.SetContent(sample)
 	window.ShowAndRun()
 }
