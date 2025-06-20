@@ -3,7 +3,6 @@ package ui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -20,13 +19,19 @@ type Event struct {
 
 func NewEvent(id string, icon *widget.Icon, title *ClickableText, titleButtons []*widget.Button, detail fyne.CanvasObject) *Event {
 	var titleBox *fyne.Container
-	if icon == nil {
-		titleBox = container.NewHBox(title, layout.NewSpacer())
-	} else {
-		titleBox = container.NewHBox(icon, title, layout.NewSpacer())
+	var rightComponent fyne.CanvasObject
+	if len(titleButtons) > 0 {
+		objects := make([]fyne.CanvasObject, len(titleButtons))
+		for i, button := range titleButtons {
+			objects[i] = button
+		}
+		rightComponent = container.NewHBox(objects...)
 	}
-	for _, button := range titleButtons {
-		titleBox.Add(button)
+
+	if icon == nil {
+		titleBox = container.NewBorder(nil, nil, nil, rightComponent, title)
+	} else {
+		titleBox = container.NewBorder(nil, nil, icon, rightComponent, title)
 	}
 
 	detail.Hide()
