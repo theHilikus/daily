@@ -28,3 +28,6 @@
 .idea
 /out/
 *.iml
+
+# Fyne build
+fyne-cross/
