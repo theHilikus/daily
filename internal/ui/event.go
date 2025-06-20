@@ -19,7 +19,12 @@ type Event struct {
 }
 
 func NewEvent(id string, icon *widget.Icon, title *ClickableText, titleButtons []*widget.Button, detail fyne.CanvasObject) *Event {
-	titleBox := container.NewHBox(icon, title, layout.NewSpacer())
+	var titleBox *fyne.Container
+	if icon == nil {
+		titleBox = container.NewHBox(title, layout.NewSpacer())
+	} else {
+		titleBox = container.NewHBox(icon, title, layout.NewSpacer())
+	}
 	for _, button := range titleButtons {
 		titleBox.Add(button)
 	}
