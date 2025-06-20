@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/theHilikus/daily/internal/notification"
 	"log/slog"
 	"net/url"
 	"os"
@@ -320,8 +321,8 @@ func notify(event *event, timeToStart time.Duration) {
 	} else if remaining <= 0 {
 		notifTitle = "'" + event.title + "' is starting now"
 	}
-	notification := fyne.NewNotification(notifTitle, notifBody)
-	dailyApp.SendNotification(notification)
+
+	notification.SendNotification(dailyApp, notifTitle, notifBody)
 	event.notifiable = false
 }
 
