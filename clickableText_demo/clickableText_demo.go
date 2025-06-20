@@ -2,19 +2,19 @@ package main
 
 import (
 	"fmt"
-	"image/color"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"github.com/theHilikus/daily/internal/ui"
+	"image/color"
 )
 
 func main() {
-	app := app.New()
-	window := app.NewWindow("Clickable text demo")
+	demoApp := app.New()
+	window := demoApp.NewWindow("Clickable text demo")
 	window.Resize(fyne.NewSize(400, 600))
 
-	sample := ui.NewClickableText("Test", fyne.TextStyle{Bold: true}, color.Black)
+	red := color.RGBA{R: 255, A: 255}
+	sample := ui.NewClickableText("Test is a very long text meeeeeeeessssssaaaaaagggggggeeeeeeee", fyne.TextStyle{Bold: true}, red)
 	sample.OnTapped = func(pe *fyne.PointEvent) {
 		fmt.Println("Tapppped")
 	}

@@ -11,15 +11,16 @@ import (
 )
 
 func main() {
-	app := app.New()
-	window := app.NewWindow("Event Demo")
+	demoApp := app.New()
+	window := demoApp.NewWindow("Event Demo")
 	window.Resize(fyne.NewSize(400, 600))
 
 	details := widget.TextSegment{
 		Text: "Details",
 	}
 
-	title := ui.NewClickableText("hello", fyne.TextStyle{Bold: true}, color.Black)
+	blue := color.RGBA{B: 255, A: 255}
+	title := ui.NewClickableText("hello this is a veeeeeeeeeery long liiiiiiiiiiiinnnneeeeeeeeeeee", fyne.TextStyle{Bold: true}, blue)
 	button1 := widget.NewButton("but1", func() { fmt.Println("button1") })
 	button2 := widget.NewButton("but2", func() { fmt.Println("button2") })
 
