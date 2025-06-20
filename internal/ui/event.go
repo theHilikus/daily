@@ -10,6 +10,7 @@ import (
 type Event struct {
 	widget.BaseWidget
 
+	Id           string // Unique ID for the event
 	Title        *ClickableText
 	TitleButtons []*widget.Button
 	Detail       fyne.CanvasObject
@@ -17,7 +18,7 @@ type Event struct {
 	container    *fyne.Container
 }
 
-func NewEvent(icon *widget.Icon,title *ClickableText, titleButtons []*widget.Button, detail fyne.CanvasObject) *Event {
+func NewEvent(id string, icon *widget.Icon, title *ClickableText, titleButtons []*widget.Button, detail fyne.CanvasObject) *Event {
 	titleBox := container.NewHBox(icon, title, layout.NewSpacer())
 	for _, button := range titleButtons {
 		titleBox.Add(button)
@@ -26,6 +27,7 @@ func NewEvent(icon *widget.Icon,title *ClickableText, titleButtons []*widget.But
 	detail.Hide()
 	rootContainer := container.NewVBox(container.NewPadded(titleBox), detail, widget.NewSeparator())
 	result := &Event{
+		Id:           id,
 		Title:        title,
 		TitleButtons: titleButtons,
 		Detail:       detail,
@@ -43,6 +45,10 @@ func NewEvent(icon *widget.Icon,title *ClickableText, titleButtons []*widget.But
 	}
 
 	return result
+}
+
+func (event *Event) IsOpen() bool {
+	return event.open
 }
 
 func (event *Event) Close() {

@@ -155,6 +155,16 @@ func refresh(forceRetrieve bool) {
 	} else {
 		slog.Debug(msg)
 	}
+
+	expandedState := make(map[string]bool)
+	for _, obj := range eventsList.Objects {
+		if eventWidget, ok := obj.(*ui.Event); ok {
+			if eventWidget.IsOpen() {
+				expandedState[eventWidget.Id] = true
+			}
+		}
+	}
+
 	eventsList.RemoveAll()
 	events, err := getEvents(forceRetrieve)
 	if err != nil {
@@ -250,7 +260,11 @@ func refresh(forceRetrieve bool) {
 			}
 		}
 
-		eventsList.Add(ui.NewEvent(responseIcon, title, buttons, widget.NewRichText(&details)))
+		eventWidget := ui.NewEvent(event.id, responseIcon, title, buttons, widget.NewRichText(&details))
+		if expandedState[eventWidget.Id] {
+			eventWidget.Open()
+		}
+		eventsList.Add(eventWidget)
 	}
 
 	eventsList.Refresh()
@@ -379,6 +393,7 @@ func isOnSameDay(one time.Time, other time.Time) bool {
 }
 
 type event struct {
+	id         string
 	title      string
 	start      time.Time
 	end        time.Time
@@ -458,18 +473,18 @@ func newDummyEventSource() *dummyEventSource {
 	return &dummyEventSource{
 		originalNow: now,
 		yesterday: []event{
-			{title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
+			{id: "1", title: "past event yesterday with zoom", location: "http://www.zoom.us/1234", details: "Past event", start: start1.Add(-24 * time.Hour), end: time.Now().Add(-24*time.Hour + 30*time.Minute)},
 		},
 		today: []event{
-			{title: "past event", location: "location1", details: "details1", start: start1, end: end1, response: accepted},
-			{title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour), response: declined},
-			{title: "current event", location: "location3", details: "detauls3", start: now.Add(-10 * time.Minute), end: now.Add(30 * time.Minute), response: declined},
-			{title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Minute), response: tentative},
-			{title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
-			{title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true, response: accepted},
+			{id: "2", title: "past event", location: "location1", details: "details1", start: start1, end: end1, response: accepted},
+			{id: "3", title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour), response: declined},
+			{id: "4", title: "current event", location: "location3", details: "detauls3", start: now.Add(-10 * time.Minute), end: now.Add(30 * time.Minute), response: declined},
+			{id: "5", title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Minute), response: tentative},
+			{id: "6", title: "future event today", location: "location5", details: "details5", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
+			{id: "7", title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true, response: accepted},
 		},
 		tomorrow: []event{
-			{title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},
+			{id: "8", title: "future event tomorrow with gmeeting", location: "https://meet.google.com/3456", details: "Future Event", start: start1.Add(24 * time.Hour), end: time.Now().Add(24*time.Hour + 30*time.Minute)},
 		},
 	}
 }
