@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
-	"image/color"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/theHilikus/daily/internal/ui"
 )
@@ -19,8 +18,7 @@ func main() {
 		Text: "Details",
 	}
 
-	blue := color.RGBA{B: 255, A: 255}
-	title := ui.NewClickableText("hello this is a veeeeeeeeeery long liiiiiiiiiiiinnnneeeeeeeeeeee", fyne.TextStyle{Bold: true}, blue)
+	title := ui.NewClickableText("hello this is a veeeeeeeeeery long liiiiiiiiiiiinnnneeeeeeeeeeee", fyne.TextStyle{Bold: true}, theme.ColorNameForeground)
 	button1 := widget.NewButton("but1", func() { fmt.Println("button1") })
 	button2 := widget.NewButton("but2", func() { fmt.Println("button2") })
 

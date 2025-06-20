@@ -199,11 +199,11 @@ func refresh(forceRetrieve bool) {
 		event := &events[pos]
 		eventText := event.start.Format("3:04-") + event.end.Format("3:04PM ")
 		eventStyle := fyne.TextStyle{}
-		eventColour := theme.DefaultTheme().Color(theme.ColorNameForeground, theme.VariantLight)
+		eventColour := theme.ColorNameForeground
 		if event.isFinished() {
 			//past events
 			eventText += event.title
-			eventColour = theme.DefaultTheme().Color(theme.ColorNameDisabled, theme.VariantLight)
+			eventColour = theme.ColorNameDisabled
 		} else if event.isStarted() {
 			//ongoing events
 			timeToEnd := time.Until(event.end)

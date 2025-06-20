@@ -14,7 +14,7 @@ import (
 type ClickableText struct {
 	widget.BaseWidget
 
-	text          *canvas.Text
+	text          *widget.RichText
 	background    *canvas.Rectangle
 	rootContainer *fyne.Container
 	tapAnim       *fyne.Animation
@@ -22,18 +22,18 @@ type ClickableText struct {
 	OnTapped func(*fyne.PointEvent)
 }
 
-func NewClickableText(text string, style fyne.TextStyle, colour color.Color) *ClickableText {
-	size := float32(0)
-	if fyne.CurrentApp() != nil { // nil app possible if app not started
-		size = fyne.CurrentApp().Settings().Theme().Size("text") // manually name the size to avoid import loop
-	}
-	result := &ClickableText{
-		text: &canvas.Text{
-			Text:      text,
-			TextSize:  size,
+func NewClickableText(text string, style fyne.TextStyle, colour fyne.ThemeColorName) *ClickableText {
+	richText := widget.NewRichText(&widget.TextSegment{
+		Text: text,
+		Style: widget.RichTextStyle{
 			TextStyle: style,
-			Color:     colour,
+			ColorName: colour,
 		},
+	})
+	richText.Wrapping = fyne.TextWrapWord
+
+	result := &ClickableText{
+		text:       richText,
 		background: canvas.NewRectangle(color.Transparent),
 	}
 	result.ExtendBaseWidget(result)
