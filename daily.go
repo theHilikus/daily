@@ -126,7 +126,7 @@ func buildUi() fyne.Window {
 	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayButton) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
-	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
+	content := container.NewBorder(topBar, bottomBar, nil, nil, container.NewVScroll(eventsList))
 	window.SetContent(content)
 
 	cronHandler := cron.New()
@@ -221,6 +221,10 @@ func refresh(forceRetrieve bool) {
 					slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
 				}
 			}
+		}
+
+		if event.recurring {
+			eventText += " 🗘"
 		}
 
 		var responseIcon *widget.Icon
@@ -397,6 +401,7 @@ type event struct {
 	notifiable bool
 	notified   bool
 	response   responseStatus
+	recurring  bool
 }
 
 type responseStatus string
@@ -473,7 +478,7 @@ func newDummyEventSource() *dummyEventSource {
 		today: []event{
 			{id: "2", title: "past event", location: "location1", details: "details1", start: start1, end: end1, response: accepted},
 			{id: "3", title: "past event with zoom meeting", location: "http://www.zoom.us/1234", details: "detauls2", start: start1.Add(time.Hour), end: end1.Add(time.Hour), response: declined},
-			{id: "4", title: "current event", location: "location3", details: "detauls3", start: now.Add(-10 * time.Minute), end: now.Add(30 * time.Minute), response: declined},
+			{id: "4", title: "current event", location: "location3", details: "detauls3", start: now.Add(-10 * time.Minute), end: now.Add(30 * time.Minute), response: declined, recurring: true},
 			{id: "5", title: "A very long current event with zoom meeting that is longer than the rest", location: "https://www.zoom.us/2345", details: "details4", start: now, end: now.Add(time.Minute), response: tentative},
 			{id: "6", title: "future event today", location: "location5", details: "details5 with very long text that might need wrapping because it is so long", start: now.Add(1 * time.Minute), end: time.Now().Add(6*time.Hour + 30*time.Minute), response: needsAction},
 			{id: "7", title: "future event today with gmeeting", location: "https://meet.google.com/3456", details: "details6", start: now.Add(2 * time.Minute), end: time.Now().Add(7*time.Hour + 30*time.Minute), notifiable: true, response: accepted},

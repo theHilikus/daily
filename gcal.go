@@ -236,7 +236,7 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 		TimeMin(gcal.requestStartDate.Format(time.RFC3339)).
 		TimeMax(gcal.requestEndDate.Format(time.RFC3339)).
 		OrderBy("startTime").
-		Fields("etag", "nextPageToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency)").
+		Fields("etag", "nextPageToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency, recurringEventId)").
 		Do()
 
 	if err == nil {
@@ -275,6 +275,7 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 				details:    item.Description,
 				notifiable: selfResponse != "declined" && item.Transparency != "transparent",
 				response:   selfResponse,
+				recurring:  item.RecurringEventId != "",
 			}
 			if item.HangoutLink != "" {
 				newEvent.location = item.HangoutLink
