@@ -126,7 +126,7 @@ func buildUi() fyne.Window {
 	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayButton) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
-	content := container.NewBorder(topBar, bottomBar, nil, nil, eventsList)
+	content := container.NewBorder(topBar, bottomBar, nil, nil, container.NewVScroll(eventsList))
 	window.SetContent(content)
 
 	cronHandler := cron.New()
