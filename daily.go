@@ -357,7 +357,7 @@ func showSettings(dailyApp fyne.App) {
 		}
 	})
 
-	connectBox := container.NewHBox(connectButton, calendarIdLabel, calendarIdBox)
+	connectBox := container.NewHBox(connectButton, calendarIdLabel, container.NewGridWrap(fyne.NewSize(100, calendarIdBox.MinSize().Height), calendarIdBox))
 
 	saveButton := widget.NewButton("Save", func() {
 		err := keyring.Set("theHilikus-daily-app", "calendar-token", gCalToken)
