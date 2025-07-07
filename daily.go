@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/theHilikus/daily/internal/notification"
 	"log/slog"
 	"net/url"
 	"os"
@@ -244,7 +245,7 @@ func refresh(forceRetrieve bool) {
 			Text: event.details,
 		}
 		var buttons []*widget.Button
-		if strings.HasPrefix(event.location, "https://") || strings.HasPrefix(event.location, "http://") {
+		if event.isVirtualMeeting() {
 			locationUrl, err := url.Parse(event.location)
 			if err == nil {
 				meetingButton := widget.NewButtonWithIcon("", theme.MediaVideoIcon(), func() {
@@ -320,8 +321,12 @@ func notify(event *event, timeToStart time.Duration) {
 	} else if remaining <= 0 {
 		notifTitle = "'" + event.title + "' is starting now"
 	}
-	notification := fyne.NewNotification(notifTitle, notifBody)
-	dailyApp.SendNotification(notification)
+
+	var meetingLink string
+	if event.isVirtualMeeting() {
+		meetingLink = event.location
+	}
+	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
 	event.notifiable = false
 }
 
@@ -421,6 +426,10 @@ func (otherEvent *event) isFinished() bool {
 func (otherEvent *event) isStarted() bool {
 	now := time.Now()
 	return otherEvent.start.Before(now) && otherEvent.end.After(now)
+}
+
+func (otherEvent *event) isVirtualMeeting() bool {
+	return strings.HasPrefix(otherEvent.location, "https://") || strings.HasPrefix(otherEvent.location, "http://")
 }
 
 func getEvents(forceRetrieve bool) ([]event, error) {
