@@ -39,7 +39,7 @@ func SendNotification(app fyne.App, title, message string, meetingLink string) {
 
 func dumpIcon(app fyne.App) string {
 	tmpDir := os.TempDir()
-	iconPath := filepath.Join(tmpDir, app.Metadata().Icon.Name())
+	iconPath := filepath.Join(tmpDir, app.UniqueID()+"-"+app.Metadata().Icon.Name())
 
 	if _, err := os.Stat(iconPath); err == nil {
 		return iconPath
