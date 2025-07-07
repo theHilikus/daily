@@ -90,12 +90,12 @@ $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
 func SendNotification(app fyne.App, title, message string, meetingLink string) {
 	slog.Info("Using Windows-specific notification.")
 
-	var actions []action
+	actions := []action{}
 	if meetingLink != "" {
-		actions = []action{
-			{Type: "protocol", Label: "Launch Meeting", Arguments: meetingLink},
-		}
+		actions = append(actions, action{Type: "protocol", Label: "Launch Meeting", Arguments: meetingLink})
 	}
+	actions = append(actions, action{Type: "protocol", Label: "Dismiss"})
+
 	notification := notification{
 		AppID:   app.Metadata().Name,
 		Title:   title,
