@@ -4,15 +4,14 @@ package notification
 
 import (
 	"bytes"
+	"fmt"
 	"fyne.io/fyne/v2"
-	"io/ioutil"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"text/template"
 
-	"github.com/nu7hatch/gouuid"
 	"syscall"
 )
 
@@ -118,7 +117,7 @@ func (n *notification) push() error {
 	if err != nil {
 		return err
 	}
-	return invokeTemporaryScript(xml)
+	return runScript("notification", xml)
 }
 
 func (n *notification) applyDefaults() {
@@ -134,22 +133,6 @@ func (n *notification) buildXML() (string, error) {
 		return "", err
 	}
 	return out.String(), nil
-}
-
-func invokeTemporaryScript(content string) error {
-	id, _ := uuid.NewV4()
-	file := filepath.Join(os.TempDir(), id.String()+".ps1")
-	defer os.Remove(file)
-	err := ioutil.WriteFile(file, []byte(content), 0600)
-	if err != nil {
-		return err
-	}
-	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", "-File", file)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	if err = cmd.Run(); err != nil {
-		return err
-	}
-	return nil
 }
 
 func dumpIcon(app fyne.App) string {
@@ -179,4 +162,29 @@ func dumpIcon(app fyne.App) string {
 	}
 
 	return iconPath
+}
+
+var scriptNum = 0
+
+func runScript(name, script string) error {
+	scriptNum++
+	appID := fyne.CurrentApp().UniqueID()
+	fileName := fmt.Sprintf("%s-%s-%d.ps1", appID, name, scriptNum)
+
+	tmpFilePath := filepath.Join(os.TempDir(), fileName)
+	err := os.WriteFile(tmpFilePath, []byte(script), 0600)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFilePath)
+
+	launch := "(Get-Content -Encoding UTF8 -Path " + tmpFilePath + " -Raw) | Invoke-Expression"
+	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", launch)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
