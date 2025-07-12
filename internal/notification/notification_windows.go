@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"fmt"
 	"fyne.io/fyne/v2"
+	"golang.org/x/sys/windows"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"text/template"
+	"unsafe"
 
 	"syscall"
 )
@@ -67,8 +69,8 @@ $template = @"
             <text><![CDATA[{{.Message}}]]></text>
         </binding>
     </visual>
-    
-	<audio src="$SOUND" loop="false" />
+
+	<audio silent="true" />
 
     {{if .Actions}}
     <actions>
@@ -112,6 +114,10 @@ func SendNotification(app fyne.App, title, message string, meetingLink string) {
 }
 
 func (n *notification) push() error {
+	err := playCalendarReminderSound()
+	if err != nil {
+		return err
+	}
 	n.applyDefaults()
 	xml, err := n.buildXML()
 	if err != nil {
@@ -184,6 +190,41 @@ func runScript(name, script string) error {
 	err = cmd.Run()
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func playCalendarReminderSound() error {
+	const (
+		// SND_ALIAS specifies that the sound parameter is a system-event alias.
+		SND_ALIAS = 0x10000
+		// SND_ASYNC plays the sound asynchronously.
+		SND_ASYNC = 0x0001
+	)
+
+	soundAlias := "Notification.Reminder"
+
+	soundPtr, err := windows.UTF16PtrFromString(soundAlias)
+	if err != nil {
+		return fmt.Errorf("failed to convert sound alias to UTF-16 pointer: %w", err)
+	}
+
+	winmm := windows.NewLazySystemDLL("winmm.dll")
+	playSound := winmm.NewProc("PlaySoundW")
+
+	// Call the PlaySoundW function.
+	// The first parameter is the sound alias.
+	// The second parameter (hmod) is not used when playing a system alias, so it is 0.
+	// The third parameter is the combination of flags.
+	ret, _, err := playSound.Call(
+		uintptr(unsafe.Pointer(soundPtr)),
+		0,
+		SND_ALIAS|SND_ASYNC,
+	)
+
+	if ret == 0 {
+		return fmt.Errorf("Failed to play sound: %w", err)
 	}
 
 	return nil
