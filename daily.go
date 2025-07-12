@@ -106,12 +106,22 @@ func buildUi() fyne.Window {
 		})
 	}
 
+	notifCount := 0
+	notifTestButton := widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
+		notifCount++
+		link := ""
+		if notifCount%2 == 0 {
+			link = "https://www.example.com/meeting/123"
+		}
+		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link)
+	})
+	notifTestButton.Hidden = !*debug
 	lastErrorButton = widget.NewButtonWithIcon("", theme.WarningIcon(), func() {})
 	lastErrorButton.Importance = widget.DangerImportance
 	lastErrorButton.Hidden = true
 	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { refresh(true) })
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
-	toolbar := container.NewHBox(layout.NewSpacer(), lastErrorButton, refreshButton, settingsButton)
+	toolbar := container.NewHBox(layout.NewSpacer(), notifTestButton, lastErrorButton, refreshButton, settingsButton)
 
 	var dayButton *widget.Button
 	dayButton = widget.NewButton(displayDay.Format(dayFormat), func() {
