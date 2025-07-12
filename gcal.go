@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -230,23 +232,60 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	gcal.requestStartDate = day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	gcal.requestEndDate = day.AddDate(0, 0, requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	calendarId := dailyApp.Preferences().String("calendar-id")
+	syncToken := dailyApp.Preferences().String("calendar-sync-token")
+
 	slog.Info("Retrieving events from gCal between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339) + " for calendarId = " + calendarId)
-	response, err := gcal.service.Events.List(calendarId).
+	isIncremental := syncToken != "" && len(gcal.eventsBuffer) > 0
+	listCall := gcal.service.Events.List(calendarId)
+
+	if isIncremental {
+		slog.Debug("Performing incremental sync with syncToken")
+		listCall.SyncToken(syncToken)
+	} else {
+		slog.Debug("Performing full sync")
+		listCall.TimeMin(gcal.requestStartDate.Format(time.RFC3339)).
+			TimeMax(gcal.requestEndDate.Format(time.RFC3339))
+	}
+
+	response, err := listCall.
 		SingleEvents(true).
-		TimeMin(gcal.requestStartDate.Format(time.RFC3339)).
-		TimeMax(gcal.requestEndDate.Format(time.RFC3339)).
-		OrderBy("startTime").
-		Fields("etag", "nextPageToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency, recurringEventId)").
+		Fields("etag", "nextPageToken", "nextSyncToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency, recurringEventId)").
 		Do()
 
-	if err == nil {
-		slog.Debug("Retrieved " + strconv.Itoa(len(response.Items)) + " event(s) successfully")
-	} else {
+	if err != nil {
+		// A 410 GONE status indicates the sync token is invalid. Perform a full sync to get a new sync token.
+		if googleErr, ok := err.(*googleapi.Error); ok && googleErr.Code == http.StatusGone {
+			slog.Warn("Sync token is invalid. Performing a full sync.")
+			dailyApp.Preferences().SetString("calendar-sync-token", "")
+			gcal.eventsBuffer = nil
+			return gcal.retrieveEventsAround(day)
+		}
 		return err
 	}
 
-	var allEvents []event
+	if response.NextSyncToken != "" {
+		dailyApp.Preferences().SetString("calendar-sync-token", response.NextSyncToken)
+	}
+
+	slog.Debug("Retrieved "+strconv.Itoa(len(response.Items))+" changed event(s) successfully", "calendarId", calendarId)
+
+	// Create a map to hold the final list of events.
+	// If it's an incremental sync, prepopulate it with the existing events.
+	// If it's a full sync, it will start empty, effectively replacing the old buffer.
+	finalEvents := make(map[string]event)
+	if isIncremental {
+		for _, e := range gcal.eventsBuffer {
+			finalEvents[e.id] = e
+		}
+	}
+
 	for _, item := range response.Items {
+		// If an event is "cancelled", it means it was deleted. Remove it from our map.
+		if item.Status == "cancelled" {
+			delete(finalEvents, item.Id)
+			continue
+		}
+
 		if item.Start.DateTime != "" {
 			//for now, ignore day events
 			eventStart, err := time.Parse(time.RFC3339, item.Start.DateTime)
@@ -282,10 +321,25 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 			} else {
 				newEvent.location = item.Location
 			}
-			allEvents = append(allEvents, newEvent)
+
+			finalEvents[newEvent.id] = newEvent
 		}
 	}
-	gcal.eventsBuffer = allEvents
+
+	gcal.eventsBuffer = make([]event, 0, len(finalEvents))
+	for _, e := range finalEvents {
+		gcal.eventsBuffer = append(gcal.eventsBuffer, e)
+	}
+
+	slices.SortFunc(gcal.eventsBuffer, func(a, b event) int {
+		if a.start.Before(b.start) {
+			return -1
+		} else if a.start.After(b.start) {
+			return 1
+		} else {
+			return 0
+		}
+	})
 
 	return nil
 }
