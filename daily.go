@@ -31,7 +31,7 @@ var (
 	displayDay      time.Time
 	eventsList      *fyne.Container
 	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
-	verbose         = flag.Bool("verbose", false, "Enable extra debug logs")
+	debug           = flag.Bool("debug", false, "Enable debug mode")
 	lastFullRefresh time.Time
 	lastErrorButton *widget.Button
 	settingsWindow  fyne.Window
@@ -79,7 +79,7 @@ func configureLog() {
 	lvl := new(slog.LevelVar)
 	lvl.Set(slog.LevelInfo)
 	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl, ReplaceAttr: replacer})
-	if *verbose {
+	if *debug {
 		lvl.Set(slog.LevelDebug)
 	}
 	slog.SetDefault(slog.New(handler))
