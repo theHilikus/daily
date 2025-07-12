@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -329,6 +330,16 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	for _, e := range finalEvents {
 		gcal.eventsBuffer = append(gcal.eventsBuffer, e)
 	}
+
+	slices.SortFunc(gcal.eventsBuffer, func(a, b event) int {
+		if a.start.Before(b.start) {
+			return -1
+		} else if a.start.After(b.start) {
+			return 1
+		} else {
+			return 0
+		}
+	})
 
 	return nil
 }
