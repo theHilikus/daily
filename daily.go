@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -31,13 +32,14 @@ var (
 	displayDay      time.Time
 	eventsList      *fyne.Container
 	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
-	debug           = flag.Bool("debug", false, "Enable debug mode")
+	debugFlag       = flag.Bool("debug", false, "Enable debug mode")
 	lastFullRefresh time.Time
 	lastErrorButton *widget.Button
 	settingsWindow  fyne.Window
 
 	eventSource EventSource
 	dailyApp    fyne.App
+	appVersion  string
 )
 
 const dayFormat = "Mon, Jan 02"
@@ -51,8 +53,6 @@ type EventSource interface {
 func main() {
 	flag.Parse()
 	configureLog()
-
-	slog.Info("Starting app")
 
 	window := buildUi()
 
@@ -79,18 +79,19 @@ func configureLog() {
 	lvl := new(slog.LevelVar)
 	lvl.Set(slog.LevelInfo)
 	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl, ReplaceAttr: replacer})
-	if *debug {
+	if *debugFlag {
 		lvl.Set(slog.LevelDebug)
 	}
 	slog.SetDefault(slog.New(handler))
 }
 
 func buildUi() fyne.Window {
-	displayDay = time.Now()
-
 	dailyApp = app.NewWithID("com.github.theHilikus.daily")
+	appVersion = dailyApp.Metadata().Version + "_" + getGitCommit()
+	slog.Info("Starting app version " + appVersion)
 	dailyApp.SetIcon(ui.ResourceAppIconPng)
 
+	displayDay = time.Now()
 	window := dailyApp.NewWindow("Daily")
 	window.Resize(fyne.NewSize(400, 600))
 
@@ -115,7 +116,7 @@ func buildUi() fyne.Window {
 		}
 		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link)
 	})
-	notifTestButton.Hidden = !*debug
+	notifTestButton.Hidden = !*debugFlag
 	lastErrorButton = widget.NewButtonWithIcon("", theme.WarningIcon(), func() {})
 	lastErrorButton.Importance = widget.DangerImportance
 	lastErrorButton.Hidden = true
@@ -156,6 +157,18 @@ func buildUi() fyne.Window {
 	cronHandler.Start()
 
 	return window
+}
+
+func getGitCommit() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				return "g" + setting.Value[:7]
+			}
+		}
+	}
+
+	return "unknown"
 }
 
 func refresh(forceRetrieve bool) {
@@ -380,7 +393,7 @@ func showSettings(dailyApp fyne.App) {
 		settingsWindow.Close()
 	})
 
-	versionLabel := widget.NewLabel("Version: " + dailyApp.Metadata().Version + "-" + strconv.Itoa(dailyApp.Metadata().Build))
+	versionLabel := widget.NewLabel("Version: " + appVersion)
 	content := container.NewVBox(
 		widget.NewLabel("Connect to"),
 		connectBox,
