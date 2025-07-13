@@ -249,7 +249,7 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 
 	response, err := listCall.
 		SingleEvents(true).
-		Fields("etag", "nextPageToken", "nextSyncToken", "summary", "timeZone", "items(attendees, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency, recurringEventId)").
+		Fields("etag", "nextPageToken", "nextSyncToken", "summary", "timeZone", "items(attendees, conferenceData, created, updated, description, start, end, etag, eventType, hangoutLink, htmlLink, id, location, status, summary, transparency, recurringEventId)").
 		Do()
 
 	if err != nil {
@@ -316,7 +316,15 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 				response:   selfResponse,
 				recurring:  item.RecurringEventId != "",
 			}
-			if item.HangoutLink != "" {
+
+			if item.ConferenceData != nil {
+				for _, entryPoint := range item.ConferenceData.EntryPoints {
+					if entryPoint.EntryPointType == "video" {
+						newEvent.location = entryPoint.Uri
+						break
+					}
+				}
+			} else if item.HangoutLink != "" {
 				newEvent.location = item.HangoutLink
 			} else {
 				newEvent.location = item.Location
