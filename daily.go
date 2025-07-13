@@ -95,7 +95,9 @@ func buildUi() fyne.Window {
 
 	displayDay = time.Now()
 	window := dailyApp.NewWindow("Daily")
-	window.Resize(fyne.NewSize(400, 600))
+	width := dailyApp.Preferences().FloatWithFallback("window-width", 400)
+	height := dailyApp.Preferences().FloatWithFallback("window-height", 600)
+	window.Resize(fyne.NewSize(float32(width), float32(height)))
 
 	if desk, ok := dailyApp.(desktop.App); ok {
 		showItem := fyne.NewMenuItem("Show", func() {
