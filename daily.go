@@ -109,6 +109,12 @@ func buildUi() fyne.Window {
 		window.SetCloseIntercept(func() {
 			window.Hide()
 		})
+		dailyApp.Lifecycle().SetOnStopped(func() {
+			size := window.Canvas().Size()
+			dailyApp.Preferences().SetFloat("window-width", float64(size.Width))
+			dailyApp.Preferences().SetFloat("window-height", float64(size.Height))
+		})
+
 	}
 
 	notifCount := 0
