@@ -310,16 +310,25 @@ func refresh(forceRetrieve bool) {
 func cleanEventDetails(details string) string {
 	result := details
 	if isHTML(details) {
+
 		markdown, err := md.ConvertString(details)
 		if err != nil {
 			slog.Error("Could not convert details '"+details+"' to markdown", "error", err)
 		} else {
 			result = markdown
 		}
-	} else {
-		urlPattern := regexp.MustCompile(`(?m)(https?://[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_+.~#?&/=]*)`)
-		result = urlPattern.ReplaceAllString(result, "[$1]($1)")
 	}
+
+	const rawUrlPattern = `(?m)(https?://[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_+.~#?&/=]*)`
+	combinedPattern := regexp.MustCompile(`\[[^\]]+\]\([^)]+\)|` + rawUrlPattern)
+
+	result = combinedPattern.ReplaceAllStringFunc(result, func(match string) string {
+		// If the match is already markdown, return as is
+		if strings.HasPrefix(match, "[") {
+			return match
+		}
+		return fmt.Sprintf("[%s](%s)", match, match)
+	})
 
 	return result
 }
