@@ -229,13 +229,15 @@ func (gcal *googleCalendar) getEvents(day time.Time, forceRetrieve bool) ([]even
 func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	_, timezoneOffset := day.Zone()
 	const requestHalfWindow int = 5
-	gcal.requestStartDate = day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
+	syncToken := dailyApp.Preferences().String("calendar-sync-token")
+	newRequestStartDate := day.AddDate(0, 0, -requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
+	isIncremental := syncToken != "" && len(gcal.eventsBuffer) > 0 && gcal.requestStartDate == newRequestStartDate
+
+	gcal.requestStartDate = newRequestStartDate
 	gcal.requestEndDate = day.AddDate(0, 0, requestHalfWindow).Truncate(24 * time.Hour).Add(time.Second * time.Duration(-timezoneOffset))
 	calendarId := dailyApp.Preferences().String("calendar-id")
-	syncToken := dailyApp.Preferences().String("calendar-sync-token")
 
 	slog.Info("Retrieving events from gCal between " + gcal.requestStartDate.Format(time.RFC3339) + " and " + gcal.requestEndDate.Format(time.RFC3339) + " for calendarId = " + calendarId)
-	isIncremental := syncToken != "" && len(gcal.eventsBuffer) > 0
 	listCall := gcal.service.Events.List(calendarId)
 
 	if isIncremental {
