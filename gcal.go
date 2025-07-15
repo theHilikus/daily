@@ -349,7 +349,7 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 		} else if a.start.After(b.start) {
 			return 1
 		} else {
-			return 0
+			return strings.Compare(a.title, b.title)
 		}
 	})
 
