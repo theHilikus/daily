@@ -37,6 +37,7 @@ var (
 	debugFlag       = flag.Bool("debug", false, "Enable debug mode")
 	lastFullRefresh time.Time
 	lastErrorButton *widget.Button
+	dayButton       *widget.Button
 	settingsWindow  fyne.Window
 
 	eventSource EventSource
@@ -134,7 +135,6 @@ func buildUi() fyne.Window {
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
 	toolbar := container.NewHBox(layout.NewSpacer(), notifTestButton, lastErrorButton, refreshButton, settingsButton)
 
-	var dayButton *widget.Button
 	dayButton = widget.NewButton(displayDay.Format(dayFormat), func() {
 		changeDay(time.Now(), dayButton)
 	})
@@ -188,6 +188,13 @@ func refresh(forceRetrieve bool) {
 	} else {
 		slog.Debug(msg)
 	}
+
+	if isOnSameDay(displayDay, time.Now()) {
+		dayButton.Importance = widget.HighImportance
+	} else {
+		dayButton.Importance = widget.MediumImportance
+	}
+	dayButton.Refresh()
 
 	expandedState := make(map[string]bool)
 	for _, obj := range eventsList.Objects {
