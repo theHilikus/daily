@@ -14,6 +14,7 @@ import (
 	"text/template"
 	"unsafe"
 
+	"encoding/xml"
 	"syscall"
 )
 
@@ -53,6 +54,7 @@ type action struct {
 func init() {
 	toastTemplate = template.New("toast")
 	toastTemplate.Parse(`
+$ErrorActionPreference = "Stop"
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
@@ -94,7 +96,9 @@ func SendNotification(app fyne.App, title, message string, meetingLink string) {
 
 	actions := []action{}
 	if meetingLink != "" {
-		actions = append(actions, action{Type: "protocol", Label: "Launch Meeting", Arguments: meetingLink})
+		buf := &bytes.Buffer{}
+		xml.EscapeText(buf, []byte(meetingLink))
+		actions = append(actions, action{Type: "protocol", Label: "Launch Meeting", Arguments: buf.String()})
 	}
 	actions = append(actions, action{Type: "protocol", Label: "Dismiss"})
 
@@ -187,8 +191,13 @@ func runScript(name, script string) error {
 	launch := "(Get-Content -Encoding UTF8 -Path " + tmpFilePath + " -Raw) | Invoke-Expression"
 	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", launch)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	err = cmd.Run()
 	if err != nil {
+		slog.Error("Script execution failed", "error", err, "stderr", stderr.String())
 		return err
 	}
 
