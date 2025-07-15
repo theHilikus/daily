@@ -265,9 +265,11 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 		return err
 	}
 
-	if response.NextSyncToken != "" {
-		dailyApp.Preferences().SetString("calendar-sync-token", response.NextSyncToken)
+	if response.NextPageToken != "" {
+		slog.Warn("There is a next page. Ignoring it for now")
 	}
+
+	dailyApp.Preferences().SetString("calendar-sync-token", response.NextSyncToken)
 
 	slog.Debug("Retrieved "+strconv.Itoa(len(response.Items))+" changed event(s) successfully", "calendarId", calendarId)
 
