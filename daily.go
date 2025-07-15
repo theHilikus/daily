@@ -181,9 +181,9 @@ func getGitCommit() string {
 	return "unknown"
 }
 
-func refresh(forceRetrieve bool) {
-	msg := "Refreshing UI for date " + displayDay.Format("2006-01-02") + ". Force retrieve = " + strconv.FormatBool(forceRetrieve)
-	if forceRetrieve {
+func refresh(retrieveEvents bool) {
+	msg := "Refreshing UI for date " + displayDay.Format("2006-01-02") + ". retrieveEvents = " + strconv.FormatBool(retrieveEvents)
+	if retrieveEvents {
 		slog.Info(msg)
 	} else {
 		slog.Debug(msg)
@@ -206,7 +206,7 @@ func refresh(forceRetrieve bool) {
 	}
 
 	eventsList.RemoveAll()
-	events, err := getEvents(forceRetrieve)
+	events, err := getEvents(retrieveEvents)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			slog.Warn("Not refreshing. No calendar-token found")
