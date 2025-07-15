@@ -14,6 +14,7 @@ import (
 	"text/template"
 	"unsafe"
 
+	"encoding/xml"
 	"syscall"
 )
 
@@ -95,7 +96,9 @@ func SendNotification(app fyne.App, title, message string, meetingLink string) {
 
 	actions := []action{}
 	if meetingLink != "" {
-		actions = append(actions, action{Type: "protocol", Label: "Launch Meeting", Arguments: meetingLink})
+		buf := &bytes.Buffer{}
+		xml.EscapeText(buf, []byte(meetingLink))
+		actions = append(actions, action{Type: "protocol", Label: "Launch Meeting", Arguments: buf.String()})
 	}
 	actions = append(actions, action{Type: "protocol", Label: "Dismiss"})
 
