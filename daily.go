@@ -442,13 +442,17 @@ func showSettings(dailyApp fyne.App) {
 		settingsWindow.Close()
 	})
 
+	cancelButton := widget.NewButton("Cancel", func() {
+		settingsWindow.Close()
+	})
+
 	versionLabel := widget.NewLabel("Version: " + appVersion)
 	content := container.NewVBox(
 		widget.NewLabel("Connect to"),
 		connectBox,
 		layout.NewSpacer(),
 		versionLabel,
-		saveButton,
+		container.NewHBox(layout.NewSpacer(), saveButton, cancelButton),
 	)
 
 	settingsWindow.SetContent(content)
