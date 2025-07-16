@@ -143,7 +143,7 @@ func generateRandomURLSafeString(byteLength int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func newGoogleCalendarEventSource(calendarToken string) (*googleCalendar, error) {
+func newGoogleCalendarEventSource(calendarToken string) (EventSource, error) {
 	result := googleCalendar{}
 
 	config, err := createOAuthConfig()
@@ -165,6 +165,7 @@ func newGoogleCalendarEventSource(calendarToken string) (*googleCalendar, error)
 	result.service, err = calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		slog.Error("Unable to retrieve Calendar client", "error", err)
+		return nil, err
 	}
 
 	return &result, nil

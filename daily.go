@@ -554,7 +554,7 @@ type dummyEventSource struct {
 	tomorrow    []event
 }
 
-func newDummyEventSource() *dummyEventSource {
+func newDummyEventSource() EventSource {
 	now := time.Now().Truncate(time.Minute)
 	start1 := now.Add(-3 * time.Hour)
 	end1 := start1.Add(30 * time.Minute)
