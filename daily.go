@@ -432,13 +432,22 @@ func showSettings(dailyApp fyne.App) {
 	connectBox := container.NewHBox(connectButton, calendarIdLabel, container.NewGridWrap(fyne.NewSize(100, calendarIdBox.MinSize().Height), calendarIdBox))
 
 	saveButton := widget.NewButton("Save", func() {
-		err := keyring.Set("theHilikus-daily-app", "calendar-token", gCalToken)
-		if err != nil {
-			slog.Error("Could not save calendar token", "error", err)
-			return
-		}
 		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
+		if gCalToken != "" {
+			err := keyring.Set("theHilikus-daily-app", "calendar-token", gCalToken)
+			if err != nil {
+				slog.Error("Could not save calendar token", "error", err)
+				return
+			}
+			eventSource = nil // blank it so that it gets re-instantiated with the new token
+			refresh(true)
+		}
+
 		slog.Info("Preferences saved")
+		settingsWindow.Close()
+	})
+
+	cancelButton := widget.NewButton("Cancel", func() {
 		settingsWindow.Close()
 	})
 
@@ -448,7 +457,7 @@ func showSettings(dailyApp fyne.App) {
 		connectBox,
 		layout.NewSpacer(),
 		versionLabel,
-		saveButton,
+		container.NewHBox(layout.NewSpacer(), saveButton, cancelButton),
 	)
 
 	settingsWindow.SetContent(content)
@@ -547,7 +556,7 @@ type dummyEventSource struct {
 	tomorrow    []event
 }
 
-func newDummyEventSource() *dummyEventSource {
+func newDummyEventSource() EventSource {
 	now := time.Now().Truncate(time.Minute)
 	start1 := now.Add(-3 * time.Hour)
 	end1 := start1.Add(30 * time.Minute)

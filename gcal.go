@@ -82,6 +82,14 @@ func startGCalOAuthFlow() (string, error) {
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port)}
 	var tokenResult string
 	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			go func() {
+				err := server.Shutdown(context.Background())
+				if err != nil {
+					slog.Error("Server shutdown error", "error", err)
+				}
+			}()
+		}()
 		if r.URL.Query().Get("state") != state {
 			slog.Error("State in callback didn't match original")
 			http.Error(w, "Invalid state", http.StatusBadRequest)
@@ -110,13 +118,6 @@ func startGCalOAuthFlow() (string, error) {
 			return
 		}
 
-		go func() {
-			err := server.Shutdown(context.Background())
-			if err != nil {
-				slog.Error("Server shutdown error", "error", err)
-			}
-		}()
-
 		tokenResult = string(tokenJSON)
 	})
 
@@ -127,7 +128,9 @@ func startGCalOAuthFlow() (string, error) {
 		done <- true
 	}()
 
+	slog.Info("Waiting for authentication to complete...")
 	<-done // Wait for the callback to complete
+	slog.Info("Authentication complete")
 
 	return tokenResult, nil
 }
@@ -140,7 +143,7 @@ func generateRandomURLSafeString(byteLength int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func newGoogleCalendarEventSource(calendarToken string) (*googleCalendar, error) {
+func newGoogleCalendarEventSource(calendarToken string) (EventSource, error) {
 	result := googleCalendar{}
 
 	config, err := createOAuthConfig()
@@ -162,6 +165,7 @@ func newGoogleCalendarEventSource(calendarToken string) (*googleCalendar, error)
 	result.service, err = calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		slog.Error("Unable to retrieve Calendar client", "error", err)
+		return nil, err
 	}
 
 	return &result, nil
