@@ -438,6 +438,7 @@ func showSettings(dailyApp fyne.App) {
 				slog.Error("Could not save calendar token", "error", err)
 				return
 			}
+			eventSource = nil // blank it so that it gets re-instantiated with the new token
 		}
 
 		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
