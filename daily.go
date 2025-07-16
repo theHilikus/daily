@@ -119,7 +119,7 @@ func buildUi() fyne.Window {
 	}
 
 	notifCount := 0
-	notifTestButton := widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
+	notifTestButton := widget.NewButtonWithIcon("", theme.MailSendIcon(), func() {
 		notifCount++
 		link := ""
 		if notifCount%2 == 0 {
@@ -128,7 +128,7 @@ func buildUi() fyne.Window {
 		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link)
 	})
 	notifTestButton.Hidden = !*debugFlag
-	lastErrorButton = widget.NewButtonWithIcon("", theme.WarningIcon(), func() {})
+	lastErrorButton = widget.NewButtonWithIcon("", theme.ErrorIcon(), func() {})
 	lastErrorButton.Importance = widget.DangerImportance
 	lastErrorButton.Hidden = true
 	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { refresh(true) })
