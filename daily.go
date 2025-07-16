@@ -432,6 +432,7 @@ func showSettings(dailyApp fyne.App) {
 	connectBox := container.NewHBox(connectButton, calendarIdLabel, container.NewGridWrap(fyne.NewSize(100, calendarIdBox.MinSize().Height), calendarIdBox))
 
 	saveButton := widget.NewButton("Save", func() {
+		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
 		if gCalToken != "" {
 			err := keyring.Set("theHilikus-daily-app", "calendar-token", gCalToken)
 			if err != nil {
@@ -439,9 +440,9 @@ func showSettings(dailyApp fyne.App) {
 				return
 			}
 			eventSource = nil // blank it so that it gets re-instantiated with the new token
+			refresh(true)
 		}
 
-		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
 		slog.Info("Preferences saved")
 		settingsWindow.Close()
 	})
