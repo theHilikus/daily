@@ -15,11 +15,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          lfs: true
       - name: Get app info from FyneApp.toml
         id: get_info
         run: |
-          APP_NAME=$(grep '^Name' FyneApp.toml | awk -F'=' '{print $2}' | tr -d ' "')
-          APP_VERSION=$(grep '^Version' FyneApp.toml | awk -F'=' '{print $2}' | tr -d ' "')
+          APP_NAME=$(grep '^  Name' FyneApp.toml | awk -F'=' '{print $2}' | tr -d ' "')
+          APP_VERSION=$(grep '^  Version' FyneApp.toml | awk -F'=' '{print $2}' | tr -d ' "')
 
           echo "App Name: $APP_NAME"
           echo "App Version: $APP_VERSION"
@@ -59,12 +61,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Set up Go
         uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+
+      - name: Create client.json from secret
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.CLIENT_SECRET_JSON }}" ]; then
+            echo "CLIENT_SECRET_JSON secret is not set. Aborting."
+            exit 1
+          fi
+          mkdir -p secrets
+          echo "${{ secrets.CLIENT_SECRET_JSON }}" > secrets/client.json
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
 
       - name: Install Fyne
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+        run: go install fyne.io/tools/cmd/fyne@latest
 
       - name: Build and package
         run: fyne package -os ${{ matrix.goos }} -release
@@ -73,32 +93,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-${{ matrix.goos }}
-          path: "${{ needs.prepare.outputs.app_name }}-*"
+          path: "${{ needs.prepare.outputs.app_name }}.*"
           if-no-files-found: error
 
   release:
     needs: [ prepare, build ]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ needs.prepare.outputs.app_name }} v${{ needs.prepare.outputs.app_version }}
-          draft: true
-          prerelease: false
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Upload assets to release
+      - name: Prepare artifacts
+        run: |
+          APP_NAME="${{ needs.prepare.outputs.app_name }}"
+          # linux
+          mv "dist/app-linux/$APP_NAME.tar.xz" "dist/$APP_NAME-linux.tar.xz"
+          # mac
+          zip -r "dist/$APP_NAME-mac.zip" "dist/app-darwin/$APP_NAME.app"
+          # windows
+          zip "dist/$APP_NAME-win.exe.zip" "dist/app-windows/$APP_NAME.exe"
+
+      - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use the official GitHub CLI to upload all downloaded artifacts
-          gh release upload ${{ github.ref }} dist/**/*
+          APP_NAME="${{ needs.prepare.outputs.app_name }}"
+          gh release create ${{ github.ref }} \
+            --title "${{ needs.prepare.outputs.app_name }} v${{ needs.prepare.outputs.app_version }}" --generate-notes \
+            dist/$APP_NAME-linux.tar.xz dist/$APP_NAME-mac.zip dist/$APP_NAME-win.exe.zip
