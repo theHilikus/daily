@@ -11,6 +11,11 @@ Run
 ```bash
 fyne bundle -o internal/ui/bundled.go --package ui --prefix Resource --append internal/assets/icons/icon.png
 ```
+## Releasing
+
+1. Bump version in [FyneApp.toml](FyneApp.toml)
+2. Tag commit
+3. Push tag
 
 # Credits
 Calendar icons made by [Freepik](https://www.flaticon.com/authors/freepik) from [Flaticon](https://www.flaticon.com)  
