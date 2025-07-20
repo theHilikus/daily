@@ -1,0 +1,104 @@
+name: Release Daily App
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on tags starting with 'v'
+
+jobs:
+  # Read the TOML file first and provide its info to other jobs
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      app_name: ${{ steps.get_info.outputs.name }}
+      app_version: ${{ steps.get_info.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Get app info from FyneApp.toml
+        id: get_info
+        run: |
+          APP_NAME=$(grep '^Name' FyneApp.toml | awk -F'=' '{print $2}' | tr -d ' "')
+          APP_VERSION=$(grep '^Version' FyneApp.toml | awk -F'=' '{print $2}' | tr -d ' "')
+
+          echo "App Name: $APP_NAME"
+          echo "App Version: $APP_VERSION"
+          
+          # Make the info available to other jobs as outputs
+          echo "name=$APP_NAME" >> $GITHUB_OUTPUT
+          echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
+      - name: Validate version matches tag
+        run: |
+          # Ensure the version in FyneApp.toml has been updated before tagging a new release
+          tag_version="${{ github.ref_name }}"
+          file_version="v${{ steps.get_info.outputs.version }}"
+
+          echo "Git Tag: $tag_version"
+          echo "TOML Version: $file_version"
+
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "Error: Git tag ($tag_version) does not match the version in FyneApp.toml ($file_version)"
+            exit 1
+          fi
+
+  build:
+    # Use a build matrix to build on all three platforms
+    needs: prepare
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        include:
+          - goos: linux
+            os: ubuntu-latest
+          - goos: windows
+            os: windows-latest
+          - goos: darwin
+            os: macos-latest
+            
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+
+      - name: Install Fyne
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+
+      - name: Build and package
+        run: fyne package -os ${{ matrix.goos }} -release
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.goos }}
+          path: "${{ needs.prepare.outputs.app_name }}-*"
+          if-no-files-found: error
+
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ needs.prepare.outputs.app_name }} v${{ needs.prepare.outputs.app_version }}
+          draft: true
+          prerelease: false
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Upload assets to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Use the official GitHub CLI to upload all downloaded artifacts
+          gh release upload ${{ github.ref }} dist/**/*
