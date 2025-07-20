@@ -1,0 +1,73 @@
+name: Release Daily App
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on tags starting with 'v'
+
+jobs:
+  build:
+    # Use a build matrix to build on all three platforms
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        include:
+          - goos: linux
+            os: ubuntu-latest
+          - goos: windows
+            os: windows-latest
+          - goos: darwin
+            os: macos-latest
+            
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install Fyne
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+
+      - name: Build and package
+        run: fyne package -os ${{ matrix.goos }} -release
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # The artifact will be named e.g., "app-linux"
+          name: app-${{ matrix.goos }}
+          # The path depends on the OS, so we use a wildcard
+          path: "app-*" 
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: false
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Upload assets to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Use the official GitHub CLI to upload all downloaded artifacts
+          # This is simpler than having one step per asset
+          gh release upload ${{ github.ref }} dist/**/*
