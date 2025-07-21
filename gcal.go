@@ -27,14 +27,58 @@ import (
 //go:embed secrets/client.json
 var clientSecret []byte
 
-type googleCalendar struct {
-	service          *calendar.Service
-	eventsBuffer     []event
-	requestStartDate time.Time
-	requestEndDate   time.Time
+// oauthHandler handles the OAuth2 callback.
+type oauthHandler struct {
+	state        string
+	codeVerifier string
+	config       *oauth2.Config
+	server       *http.Server
+	tokenResult  *string
 }
 
-func startGCalOAuthFlow() (string, error) {
+// ServeHTTP handles the callback request, exchanges the code for a token,
+// and shuts down the server.
+func (h *oauthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		go func() {
+			if err := h.server.Shutdown(context.Background()); err != nil {
+				slog.Error("Server shutdown error", "error", err)
+			}
+		}()
+	}()
+
+	if r.URL.Query().Get("state") != h.state {
+		slog.Error("State in callback didn't match original")
+		http.Error(w, "Invalid state", http.StatusBadRequest)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	token, err := h.config.Exchange(context.Background(), code, oauth2.SetAuthURLParam("code_verifier", h.codeVerifier))
+	if err != nil {
+		http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
+		slog.Error("Token exchange failed", "error", err, "scopes", h.config.Scopes, "redirect_uri", h.config.RedirectURL)
+		return
+	}
+
+	slog.Info("Authentication successful!")
+	tokenJSON, err := json.Marshal(token)
+	if err != nil {
+		http.Error(w, "Failed to marshal token", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	_, err = w.Write([]byte("<html><body><h1>Authentication Complete</h1>You can close this window and go back to the app</body></html>"))
+	if err != nil {
+		slog.Error("Failed to write success response", "error", err)
+		return
+	}
+
+	*h.tokenResult = string(tokenJSON)
+}
+
+func executeGoogleOAuthFlow() (string, error) {
 	slog.Info("Starting PKCE OAuth flow for Google Calendar")
 
 	config, err := createOAuthConfig()
@@ -55,7 +99,6 @@ func startGCalOAuthFlow() (string, error) {
 		slog.Error("Failed to generate state", "error", err)
 		return "", err
 	}
-	slog.Debug("Generated state: " + state)
 	codeVerifier, err := generateRandomURLSafeString(32)
 	if err != nil {
 		slog.Error("Failed to generate code verifier: %v", err)
@@ -63,13 +106,11 @@ func startGCalOAuthFlow() (string, error) {
 	}
 	codeChallenge := oauth2.S256ChallengeOption(codeVerifier)
 	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline, codeChallenge)
-
 	parsedURL, err := url.Parse(authURL)
 	if err != nil {
 		slog.Error("Failed to parse OAuth URL", "error", err)
 		return "", err
 	}
-
 	// Open the URL in the user's browser
 	err = dailyApp.OpenURL(parsedURL)
 	if err != nil {
@@ -77,49 +118,22 @@ func startGCalOAuthFlow() (string, error) {
 		return "", err
 	}
 
+	var tokenResult string
 	done := make(chan bool)
 
-	server := &http.Server{Addr: fmt.Sprintf(":%d", port)}
-	var tokenResult string
-	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			go func() {
-				err := server.Shutdown(context.Background())
-				if err != nil {
-					slog.Error("Server shutdown error", "error", err)
-				}
-			}()
-		}()
-		if r.URL.Query().Get("state") != state {
-			slog.Error("State in callback didn't match original")
-			http.Error(w, "Invalid state", http.StatusBadRequest)
-			return
-		}
-
-		code := r.URL.Query().Get("code")
-		token, err := config.Exchange(context.Background(), code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
-		if err != nil {
-			http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
-			slog.Error("Token exchange failed", "error", err, "scopes", config.Scopes, "redirect_uri", config.RedirectURL)
-			return
-		}
-
-		slog.Info("Authentication successful!")
-
-		tokenJSON, err := json.Marshal(token)
-		if err != nil {
-			http.Error(w, "Failed to marshal token", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "text/html")
-		_, err = w.Write([]byte("<html><body><h1>Authentication Complete</h1>You can close this window and go back to the app</body></html>"))
-		if err != nil {
-			return
-		}
-
-		tokenResult = string(tokenJSON)
-	})
+	mux := http.NewServeMux()
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
+	}
+	handler := &oauthHandler{
+		state:        state,
+		codeVerifier: codeVerifier,
+		config:       config,
+		server:       server,
+		tokenResult:  &tokenResult,
+	}
+	mux.Handle("/callback", handler)
 
 	go func() {
 		if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
@@ -130,45 +144,9 @@ func startGCalOAuthFlow() (string, error) {
 
 	slog.Info("Waiting for authentication to complete...")
 	<-done // Wait for the callback to complete
-	slog.Info("Authentication complete")
+	slog.Info("Authentication completed")
 
 	return tokenResult, nil
-}
-
-func generateRandomURLSafeString(byteLength int) (string, error) {
-	b := make([]byte, byteLength)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func newGoogleCalendarEventSource(calendarToken string) (EventSource, error) {
-	result := googleCalendar{}
-
-	config, err := createOAuthConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	tok := &oauth2.Token{}
-	tokenReader := strings.NewReader(calendarToken)
-	err = json.NewDecoder(tokenReader).Decode(tok)
-	if err != nil {
-		slog.Error("Error decoding token")
-		return nil, err
-	}
-
-	client := config.Client(context.Background(), tok)
-
-	ctx := context.Background()
-	result.service, err = calendar.NewService(ctx, option.WithHTTPClient(client))
-	if err != nil {
-		slog.Error("Unable to retrieve Calendar client", "error", err)
-		return nil, err
-	}
-
-	return &result, nil
 }
 
 func createOAuthConfig() (*oauth2.Config, error) {
@@ -181,7 +159,50 @@ func createOAuthConfig() (*oauth2.Config, error) {
 	return config, nil
 }
 
-func (gcal *googleCalendar) getEvents(day time.Time, forceRetrieve bool) ([]event, bool, error) {
+func generateRandomURLSafeString(byteLength int) (string, error) {
+	b := make([]byte, byteLength)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+type googleCalendarSource struct {
+	service          *calendar.Service
+	eventsBuffer     []event
+	requestStartDate time.Time
+	requestEndDate   time.Time
+}
+
+func newGoogleCalendarEventSource(calendarToken string) (EventSource, error) {
+	result := googleCalendarSource{}
+
+	config, err := createOAuthConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	token := &oauth2.Token{}
+	tokenReader := strings.NewReader(calendarToken)
+	err = json.NewDecoder(tokenReader).Decode(token)
+	if err != nil {
+		slog.Error("Error decoding token")
+		return nil, err
+	}
+
+	client := config.Client(context.Background(), token)
+
+	ctx := context.Background()
+	result.service, err = calendar.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		slog.Error("Unable to retrieve Calendar client", "error", err)
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (gcal *googleCalendarSource) getEvents(day time.Time, forceRetrieve bool) ([]event, bool, error) {
 	refreshed := false
 
 	if len(gcal.eventsBuffer) == 0 {
@@ -230,7 +251,7 @@ func (gcal *googleCalendar) getEvents(day time.Time, forceRetrieve bool) ([]even
 	return result, refreshed, nil
 }
 
-func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
+func (gcal *googleCalendarSource) retrieveEventsAround(day time.Time) error {
 	_, timezoneOffset := day.Zone()
 	const requestHalfWindow int = 5
 	syncToken := dailyApp.Preferences().String("calendar-sync-token")
@@ -277,6 +298,25 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 
 	slog.Debug("Retrieved "+strconv.Itoa(len(response.Items))+" changed event(s) successfully", "calendarId", calendarId)
 
+	err2 := gcal.processResponseItems(isIncremental, response)
+	if err2 != nil {
+		return err2
+	}
+
+	slices.SortFunc(gcal.eventsBuffer, func(a, b event) int {
+		if a.start.Before(b.start) {
+			return -1
+		} else if a.start.After(b.start) {
+			return 1
+		} else {
+			return strings.Compare(a.title, b.title)
+		}
+	})
+
+	return nil
+}
+
+func (gcal *googleCalendarSource) processResponseItems(isIncremental bool, response *calendar.Events) error {
 	// Create a map to hold the final list of events.
 	// If it's an incremental sync, prepopulate it with the existing events.
 	// If it's a full sync, it will start empty, effectively replacing the old buffer.
@@ -346,16 +386,5 @@ func (gcal *googleCalendar) retrieveEventsAround(day time.Time) error {
 	for _, e := range finalEvents {
 		gcal.eventsBuffer = append(gcal.eventsBuffer, e)
 	}
-
-	slices.SortFunc(gcal.eventsBuffer, func(a, b event) int {
-		if a.start.Before(b.start) {
-			return -1
-		} else if a.start.After(b.start) {
-			return 1
-		} else {
-			return strings.Compare(a.title, b.title)
-		}
-	})
-
 	return nil
 }

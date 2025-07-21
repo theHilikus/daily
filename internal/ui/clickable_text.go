@@ -56,7 +56,7 @@ func (clickable *ClickableText) CreateRenderer() fyne.WidgetRenderer {
 }
 
 func (clickable *ClickableText) MouseIn(*desktop.MouseEvent) {
-	clickable.changeBackground(theme.HoverColor())
+	clickable.changeBackground(theme.Color(theme.ColorNameHover))
 }
 
 func (clickable *ClickableText) MouseMoved(*desktop.MouseEvent) {
@@ -84,7 +84,7 @@ func newTapAnimation(bg *canvas.Rectangle, w fyne.Widget) *fyne.Animation {
 		bg.Resize(fyne.NewSize(size*2, w.Size().Height))
 		bg.Move(fyne.NewPos(mid-size, 0))
 
-		r, g, bb, a := theme.PressedColor().RGBA()
+		r, g, bb, a := theme.Color(theme.ColorNamePressed).RGBA()
 		aa := uint8(a)
 		fade := aa - uint8(float32(aa)*done)
 		bg.FillColor = &color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(bb), A: fade}
