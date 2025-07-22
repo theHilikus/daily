@@ -71,14 +71,16 @@ jobs:
 
       - name: Create client.json from secret
         shell: bash
+        env:
+          CLIENT_SECRET_JSON: ${{ secrets.CLIENT_SECRET_JSON }}
         run: |
-          if [ -z "${{ secrets.CLIENT_SECRET_JSON }}" ]; then
+          if [ -z "$CLIENT_SECRET_JSON" ]; then
             echo "CLIENT_SECRET_JSON secret is not set. Aborting."
             exit 1
           fi
           mkdir -p secrets
-          echo "${{ secrets.CLIENT_SECRET_JSON }}" > secrets/client.json
-
+          echo "$CLIENT_SECRET_JSON" > secrets/client.json
+          
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
