@@ -150,7 +150,7 @@ func executeGoogleOAuthFlow() (string, error) {
 }
 
 func createOAuthConfig() (*oauth2.Config, error) {
-	config, err := google.ConfigFromJSON(clientSecret, calendar.CalendarEventsReadonlyScope)
+	config, err := google.ConfigFromJSON(clientSecret, calendar.CalendarEventsOwnedReadonlyScope)
 	if err != nil {
 		slog.Error("Unable to parse client secret file to config: %v", "error", err)
 		return nil, err
