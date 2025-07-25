@@ -115,18 +115,20 @@ jobs:
       - name: Prepare artifacts
         run: |
           APP_NAME="${{ needs.prepare.outputs.app_name }}"
+          APP_VERSION="${{ needs.prepare.outputs.app_version }}"
           # linux
-          mv "dist/app-linux/$APP_NAME.tar.xz" "dist/$APP_NAME-linux.tar.xz"
+          mv "dist/app-linux/$APP_NAME.tar.xz" "dist/$APP_NAME-$APP_VERSION-linux.tar.xz"
           # mac
-          zip -r "dist/$APP_NAME-mac.zip" "dist/app-darwin/$APP_NAME.app"
+          zip -r "dist/$APP_NAME-$APP_VERSION-mac.zip" "dist/app-darwin/$APP_NAME.app"
           # windows
-          zip "dist/$APP_NAME-win.exe.zip" "dist/app-windows/$APP_NAME.exe"
+          zip "dist/$APP_NAME-$APP_VERSION-win.exe.zip" "dist/app-windows/$APP_NAME.exe"
 
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           APP_NAME="${{ needs.prepare.outputs.app_name }}"
+          APP_VERSION="${{ needs.prepare.outputs.app_version }}"
           gh release create ${{ github.ref }} \
-            --title "${{ needs.prepare.outputs.app_name }} v${{ needs.prepare.outputs.app_version }}" --generate-notes \
-            dist/$APP_NAME-linux.tar.xz dist/$APP_NAME-mac.zip dist/$APP_NAME-win.exe.zip
+            --title "$APP_NAME v${{ needs.prepare.outputs.app_version }}" --generate-notes \
+            dist/$APP_NAME-$APP_VERSION-linux.tar.xz dist/$APP_NAME-$APP_VERSION-mac.zip dist/$APP_NAME-$APP_VERSION-win.exe.zip
