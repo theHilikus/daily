@@ -99,6 +99,7 @@ func buildUi() fyne.Window {
 	width := dailyApp.Preferences().FloatWithFallback("window-width", 400)
 	height := dailyApp.Preferences().FloatWithFallback("window-height", 600)
 	window.Resize(fyne.NewSize(float32(width), float32(height)))
+	window.CenterOnScreen()
 
 	createSystray(window)
 
