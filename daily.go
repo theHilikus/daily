@@ -237,7 +237,7 @@ func refresh(retrieveEvents bool) {
 	processEvents(events)
 }
 
-func getEvents(forceRetrieve bool) ([]event, error) {
+func getEvents(retrieveEvents bool) ([]event, error) {
 	if currentEventSource == nil {
 		slog.Info("No event source found. Creating one")
 		if *testCalendar {
@@ -259,12 +259,12 @@ func getEvents(forceRetrieve bool) ([]event, error) {
 	}
 
 	updateInterval := float64(dailyApp.Preferences().IntWithFallback("calendar-update-interval", 5))
-	if !forceRetrieve && time.Since(lastFullRefresh).Minutes() > updateInterval {
-		slog.Debug("Overwriting forceRetrieve because update interval elapsed")
-		forceRetrieve = true
+	if !retrieveEvents && time.Since(lastFullRefresh).Minutes() > updateInterval {
+		slog.Debug("Overwriting retrieveEvents because update interval elapsed")
+		retrieveEvents = true
 	}
 
-	events, fullRefreshed, err := currentEventSource.getEvents(displayDay, forceRetrieve)
+	events, fullRefreshed, err := currentEventSource.getEvents(displayDay, retrieveEvents)
 
 	if fullRefreshed {
 		lastFullRefresh = time.Now()
