@@ -308,8 +308,19 @@ func processEvents(events []event) {
 		}
 	}
 
+	var lastEnd *time.Time
 	for pos := range events {
 		event := &events[pos]
+		if lastEnd == nil {
+			lastEnd = &event.start
+		}
+		const intervalDurationMinutes = 30
+		intervalsBetween := int(event.start.Sub(*lastEnd).Minutes()) / intervalDurationMinutes
+		for i := 0; i < intervalsBetween; i++ {
+			eventsList.Add(widget.NewSeparator())
+		}
+		lastEnd = &event.end
+
 		title := createEventTitle(event)
 
 		var responseIcon *widget.Icon
