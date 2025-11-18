@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/theHilikus/daily/internal/notification"
 	"log/slog"
 	"net/url"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/theHilikus/daily/internal/notification"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -143,9 +144,11 @@ func createSystray(window fyne.Window) {
 		showItem := fyne.NewMenuItem("Show", func() {
 			window.Show()
 		})
+		desk.SetSystemTrayWindow(window)
 		menu := fyne.NewMenu("Daily Systray Menu", showItem)
 		desk.SetSystemTrayMenu(menu)
 		systray.SetTitle("Daily")
+		systray.SetTooltip("Daily Agenda")
 		window.SetCloseIntercept(func() {
 			window.Hide()
 		})
