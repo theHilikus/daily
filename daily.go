@@ -219,6 +219,8 @@ func refresh(retrieveEvents bool) {
 	}
 	dayButton.Refresh()
 
+	expandedStates := getExpandedStates()
+
 	eventsList.RemoveAll()
 	events, err := getEvents(retrieveEvents)
 	if err != nil {
@@ -237,7 +239,19 @@ func refresh(retrieveEvents bool) {
 		showNoEvents()
 	}
 
-	processEvents(events)
+	processEvents(events, expandedStates)
+}
+
+func getExpandedStates() map[string]bool {
+	expandedState := make(map[string]bool)
+	for _, obj := range eventsList.Objects {
+		if eventWidget, ok := obj.(*ui.Event); ok {
+			if eventWidget.IsOpen() {
+				expandedState[eventWidget.Id] = true
+			}
+		}
+	}
+	return expandedState
 }
 
 func getEvents(retrieveEvents bool) ([]event, error) {
@@ -301,16 +315,7 @@ func reportUserError(errorMessage string) {
 	}
 }
 
-func processEvents(events []event) {
-	expandedState := make(map[string]bool)
-	for _, obj := range eventsList.Objects {
-		if eventWidget, ok := obj.(*ui.Event); ok {
-			if eventWidget.IsOpen() {
-				expandedState[eventWidget.Id] = true
-			}
-		}
-	}
-
+func processEvents(events []event, expandedState map[string]bool) {
 	var lastEnd *time.Time
 	for pos := range events {
 		event := &events[pos]
