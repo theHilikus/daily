@@ -343,7 +343,9 @@ func processEvents(events []event, expandedState map[string]bool) {
 			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
 		}
 
-		buttons := createEventButtons(event)
+		notified := notifyIfNeeded(event)
+
+		buttons := createEventButtons(event, notified)
 
 		cleanedDetails := cleanEventDetails(event.details)
 		detailsWidget := widget.NewRichTextFromMarkdown(cleanedDetails)
@@ -376,15 +378,6 @@ func createEventTitle(event *event) *ui.ClickableText {
 		//future events
 		timeToStart := time.Until(event.start)
 		eventText += "(in " + createUserFriendlyDurationText(timeToStart) + ") " + event.title
-
-		if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
-			if event.notifiable {
-				notify(event, timeToStart)
-				event.notified = true
-			} else {
-				slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
-			}
-		}
 	}
 
 	if event.recurring {
@@ -393,6 +386,21 @@ func createEventTitle(event *event) *ui.ClickableText {
 
 	title := ui.NewClickableText(eventText, eventStyle, eventColour)
 	return title
+}
+
+func notifyIfNeeded(event *event) bool {
+	result := false
+	timeToStart := time.Until(event.start)
+	if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
+		if event.notifiable {
+			sendNotification(event, timeToStart)
+			result = true
+		} else {
+			slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
+		}
+	}
+
+	return result
 }
 
 func createUserFriendlyDurationText(durationRemaining time.Duration) string {
@@ -410,7 +418,7 @@ func createUserFriendlyDurationText(durationRemaining time.Duration) string {
 	return result
 }
 
-func createEventButtons(event *event) []*widget.Button {
+func createEventButtons(event *event, notified bool) []*widget.Button {
 	var buttons []*widget.Button
 	if event.isVirtualMeeting() {
 		locationUrl, err := url.Parse(event.location)
@@ -424,7 +432,7 @@ func createEventButtons(event *event) []*widget.Button {
 			})
 			if event.isFinished() {
 				meetingButton.Disable()
-			} else if event.notified || event.isStarted() {
+			} else if notified || event.isStarted() {
 				meetingButton.Importance = widget.HighImportance
 			}
 			buttons = append(buttons, meetingButton)
@@ -475,7 +483,7 @@ func showNoEvents() {
 	eventsList.Add(layout.NewSpacer())
 }
 
-func notify(event *event, timeToStart time.Duration) {
+func sendNotification(event *event, timeToStart time.Duration) {
 	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
@@ -570,7 +578,6 @@ type event struct {
 	location   string
 	details    string
 	notifiable bool
-	notified   bool
 	response   responseStatus
 	recurring  bool
 }
