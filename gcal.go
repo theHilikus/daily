@@ -101,7 +101,7 @@ func executeGoogleOAuthFlow() (string, error) {
 	}
 	codeVerifier, err := generateRandomURLSafeString(32)
 	if err != nil {
-		slog.Error("Failed to generate code verifier: %v", err)
+		slog.Error("Failed to generate code verifier: %v", "error", err)
 		return "", err
 	}
 	codeChallenge := oauth2.S256ChallengeOption(codeVerifier)
