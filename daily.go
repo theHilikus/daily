@@ -317,6 +317,10 @@ func reportUserError(errorMessage string) {
 
 func processEvents(events []event, expandedState map[string]bool) {
 	var lastEnd *time.Time
+	notificationTime := float64(dailyApp.Preferences().IntWithFallback("notification-time", 1))
+	earlyNotificationTime := float64(dailyApp.Preferences().IntWithFallback("early-notification-time", 90))
+	lunchStarting := isLunchStarting()
+
 	for pos := range events {
 		event := &events[pos]
 		if lastEnd == nil {
@@ -343,7 +347,22 @@ func processEvents(events []event, expandedState map[string]bool) {
 			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
 		}
 
-		buttons := createEventButtons(event)
+		notified := false
+		if event.notifiable {
+			notified = notifyIfNeeded(event, notificationTime, true)
+			if notified {
+				event.notifiable = false
+				event.notifiableEarly = false
+			}
+		}
+		if event.notifiableEarly && lunchStarting {
+			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, false)
+			if notifiedEarly {
+				event.notifiableEarly = false
+			}
+		}
+
+		buttons := createEventButtons(event, notified)
 
 		cleanedDetails := cleanEventDetails(event.details)
 		detailsWidget := widget.NewRichTextFromMarkdown(cleanedDetails)
@@ -357,6 +376,12 @@ func processEvents(events []event, expandedState map[string]bool) {
 	}
 
 	eventsList.Refresh()
+}
+
+func isLunchStarting() bool {
+	lunchStartHour := dailyApp.Preferences().IntWithFallback("lunch-start-hour", 12)
+	now := time.Now()
+	return now.Hour() == lunchStartHour && now.Minute() >= 0 && now.Minute() < 5
 }
 
 func createEventTitle(event *event) *ui.ClickableText {
@@ -376,15 +401,6 @@ func createEventTitle(event *event) *ui.ClickableText {
 		//future events
 		timeToStart := time.Until(event.start)
 		eventText += "(in " + createUserFriendlyDurationText(timeToStart) + ") " + event.title
-
-		if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
-			if event.notifiable {
-				notify(event, timeToStart)
-				event.notified = true
-			} else {
-				slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
-			}
-		}
 	}
 
 	if event.recurring {
@@ -393,6 +409,17 @@ func createEventTitle(event *event) *ui.ClickableText {
 
 	title := ui.NewClickableText(eventText, eventStyle, eventColour)
 	return title
+}
+
+func notifyIfNeeded(event *event, notificationTime float64, addMeetingLink bool) bool {
+	result := false
+	timeToStart := time.Until(event.start)
+	if timeToStart.Minutes() <= notificationTime {
+		sendNotification(event, timeToStart, addMeetingLink)
+		result = true
+	}
+
+	return result
 }
 
 func createUserFriendlyDurationText(durationRemaining time.Duration) string {
@@ -410,7 +437,7 @@ func createUserFriendlyDurationText(durationRemaining time.Duration) string {
 	return result
 }
 
-func createEventButtons(event *event) []*widget.Button {
+func createEventButtons(event *event, notified bool) []*widget.Button {
 	var buttons []*widget.Button
 	if event.isVirtualMeeting() {
 		locationUrl, err := url.Parse(event.location)
@@ -424,7 +451,7 @@ func createEventButtons(event *event) []*widget.Button {
 			})
 			if event.isFinished() {
 				meetingButton.Disable()
-			} else if event.notified || event.isStarted() {
+			} else if notified || event.isStarted() {
 				meetingButton.Importance = widget.HighImportance
 			}
 			buttons = append(buttons, meetingButton)
@@ -475,23 +502,24 @@ func showNoEvents() {
 	eventsList.Add(layout.NewSpacer())
 }
 
-func notify(event *event, timeToStart time.Duration) {
+func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bool) {
 	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
 	notifBody := strconv.Itoa(remaining) + " minutes to event"
-	if remaining == 1 {
+	if remaining > 10 {
+		notifTitle = "Early notification for '" + event.title + "'"
+	} else if remaining == 1 {
 		notifBody = strconv.Itoa(remaining) + " minute to event"
 	} else if remaining <= 0 {
-		notifTitle = "'" + event.title + "' is starting now"
+		notifTitle = "'" + event.title + "' started"
 	}
 
 	var meetingLink string
-	if event.isVirtualMeeting() {
+	if addMeetingLink && event.isVirtualMeeting() {
 		meetingLink = event.location
 	}
 	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
-	event.notifiable = false
 }
 
 func showSettings(dailyApp fyne.App) {
@@ -563,16 +591,16 @@ func isOnSameDay(one time.Time, other time.Time) bool {
 }
 
 type event struct {
-	id         string
-	title      string
-	start      time.Time
-	end        time.Time
-	location   string
-	details    string
-	notifiable bool
-	notified   bool
-	response   responseStatus
-	recurring  bool
+	id              string
+	title           string
+	start           time.Time
+	end             time.Time
+	location        string
+	details         string
+	notifiable      bool
+	notifiableEarly bool
+	response        responseStatus
+	recurring       bool
 }
 
 type responseStatus string
