@@ -349,14 +349,14 @@ func processEvents(events []event, expandedState map[string]bool) {
 
 		notified := false
 		if event.notifiable {
-			notified = notifyIfNeeded(event, notificationTime)
+			notified = notifyIfNeeded(event, notificationTime, true)
 			if notified {
 				event.notifiable = false
 				event.notifiableEarly = false
 			}
 		}
 		if event.notifiableEarly && lunchStarting {
-			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime)
+			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, false)
 			if notifiedEarly {
 				event.notifiableEarly = false
 			}
@@ -411,11 +411,11 @@ func createEventTitle(event *event) *ui.ClickableText {
 	return title
 }
 
-func notifyIfNeeded(event *event, notificationTime float64) bool {
+func notifyIfNeeded(event *event, notificationTime float64, addMeetingLink bool) bool {
 	result := false
 	timeToStart := time.Until(event.start)
 	if timeToStart.Minutes() <= notificationTime {
-		sendNotification(event, timeToStart)
+		sendNotification(event, timeToStart, addMeetingLink)
 		result = true
 	}
 
@@ -502,7 +502,7 @@ func showNoEvents() {
 	eventsList.Add(layout.NewSpacer())
 }
 
-func sendNotification(event *event, timeToStart time.Duration) {
+func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bool) {
 	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
@@ -516,7 +516,7 @@ func sendNotification(event *event, timeToStart time.Duration) {
 	}
 
 	var meetingLink string
-	if event.isVirtualMeeting() {
+	if addMeetingLink && event.isVirtualMeeting() {
 		meetingLink = event.location
 	}
 	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
