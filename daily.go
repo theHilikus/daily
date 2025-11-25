@@ -317,6 +317,10 @@ func reportUserError(errorMessage string) {
 
 func processEvents(events []event, expandedState map[string]bool) {
 	var lastEnd *time.Time
+	notificationTime := float64(dailyApp.Preferences().IntWithFallback("notification-time", 1))
+	earlyNotificationTime := float64(dailyApp.Preferences().IntWithFallback("early-notification-time", 90))
+	lunchStarting := isLunchStarting()
+
 	for pos := range events {
 		event := &events[pos]
 		if lastEnd == nil {
@@ -343,7 +347,20 @@ func processEvents(events []event, expandedState map[string]bool) {
 			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
 		}
 
-		notified := notifyIfNeeded(event)
+		notified := false
+		if event.notifiable {
+			notified = notifyIfNeeded(event, notificationTime)
+			if notified {
+				event.notifiable = false
+				event.notifiableEarly = false
+			}
+		}
+		if event.notifiableEarly && lunchStarting {
+			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime)
+			if notifiedEarly {
+				event.notifiableEarly = false
+			}
+		}
 
 		buttons := createEventButtons(event, notified)
 
@@ -359,6 +376,12 @@ func processEvents(events []event, expandedState map[string]bool) {
 	}
 
 	eventsList.Refresh()
+}
+
+func isLunchStarting() bool {
+	lunchStartHour := dailyApp.Preferences().IntWithFallback("lunch-start-hour", 12)
+	now := time.Now()
+	return now.Hour() == lunchStartHour && now.Minute() >= 0 && now.Minute() < 5
 }
 
 func createEventTitle(event *event) *ui.ClickableText {
@@ -388,16 +411,12 @@ func createEventTitle(event *event) *ui.ClickableText {
 	return title
 }
 
-func notifyIfNeeded(event *event) bool {
+func notifyIfNeeded(event *event, notificationTime float64) bool {
 	result := false
 	timeToStart := time.Until(event.start)
-	if timeToStart.Minutes() <= float64(dailyApp.Preferences().IntWithFallback("notification-time", 1)) {
-		if event.notifiable {
-			sendNotification(event, timeToStart)
-			result = true
-		} else {
-			slog.Debug("Not notifying for `" + event.title + "` because it is not notifiable")
-		}
+	if timeToStart.Minutes() <= notificationTime {
+		sendNotification(event, timeToStart)
+		result = true
 	}
 
 	return result
@@ -488,10 +507,12 @@ func sendNotification(event *event, timeToStart time.Duration) {
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
 	notifBody := strconv.Itoa(remaining) + " minutes to event"
-	if remaining == 1 {
+	if remaining > 10 {
+		notifTitle = "Early notification for '" + event.title + "'"
+	} else if remaining == 1 {
 		notifBody = strconv.Itoa(remaining) + " minute to event"
 	} else if remaining <= 0 {
-		notifTitle = "'" + event.title + "' is starting now"
+		notifTitle = "'" + event.title + "' started"
 	}
 
 	var meetingLink string
@@ -499,7 +520,6 @@ func sendNotification(event *event, timeToStart time.Duration) {
 		meetingLink = event.location
 	}
 	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
-	event.notifiable = false
 }
 
 func showSettings(dailyApp fyne.App) {
@@ -571,15 +591,16 @@ func isOnSameDay(one time.Time, other time.Time) bool {
 }
 
 type event struct {
-	id         string
-	title      string
-	start      time.Time
-	end        time.Time
-	location   string
-	details    string
-	notifiable bool
-	response   responseStatus
-	recurring  bool
+	id              string
+	title           string
+	start           time.Time
+	end             time.Time
+	location        string
+	details         string
+	notifiable      bool
+	notifiableEarly bool
+	response        responseStatus
+	recurring       bool
 }
 
 type responseStatus string

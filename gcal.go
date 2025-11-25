@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"encoding/base64"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"
@@ -354,15 +355,17 @@ func (gcal *googleCalendarSource) processResponseItems(isIncremental bool, respo
 				}
 			}
 
+			notifiable := selfResponse != "declined" && item.Transparency != "transparent"
 			newEvent := event{
-				id:         item.Id,
-				title:      item.Summary,
-				start:      eventStart,
-				end:        eventEnd,
-				details:    item.Description,
-				notifiable: selfResponse != "declined" && item.Transparency != "transparent",
-				response:   selfResponse,
-				recurring:  item.RecurringEventId != "",
+				id:              item.Id,
+				title:           item.Summary,
+				start:           eventStart,
+				end:             eventEnd,
+				details:         item.Description,
+				notifiable:      notifiable,
+				notifiableEarly: notifiable,
+				response:        selfResponse,
+				recurring:       item.RecurringEventId != "",
 			}
 
 			if item.ConferenceData != nil {
