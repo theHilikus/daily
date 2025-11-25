@@ -144,8 +144,11 @@ func createSystray(window fyne.Window) {
 		showItem := fyne.NewMenuItem("Show", func() {
 			window.Show()
 		})
+		quitItem := fyne.NewMenuItem("Quit", func() {
+			dailyApp.Quit()
+		})
 		desk.SetSystemTrayWindow(window)
-		menu := fyne.NewMenu("Daily Systray Menu", showItem)
+		menu := fyne.NewMenu("Daily Systray Menu", showItem, fyne.NewMenuItemSeparator(), quitItem)
 		desk.SetSystemTrayMenu(menu)
 		systray.SetTitle("Daily")
 		systray.SetTooltip("Daily Agenda")
