@@ -33,7 +33,7 @@ import (
 
 var (
 	displayDay      time.Time
-	eventsList      *fyne.Container
+	eventsContainer *fyne.Container
 	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
 	debugFlag       = flag.Bool("debug", false, "Enable debug mode")
 	lastFullRefresh time.Time
@@ -113,13 +113,13 @@ func buildUi() fyne.Window {
 	dayBar := container.NewHBox(layout.NewSpacer(), dayButton, layout.NewSpacer())
 	topBar := container.NewVBox(toolbar, dayBar)
 
-	eventsList = container.NewVBox()
+	eventsContainer = container.NewVBox()
 
 	previousDay := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), func() { changeDay(displayDay.AddDate(0, 0, -1), dayButton) })
 	nextDay := widget.NewButtonWithIcon("", theme.NavigateNextIcon(), func() { changeDay(displayDay.AddDate(0, 0, 1), dayButton) })
 	bottomBar := container.NewHBox(layout.NewSpacer(), previousDay, layout.NewSpacer(), nextDay, layout.NewSpacer())
 
-	content := container.NewBorder(topBar, bottomBar, nil, nil, container.NewVScroll(eventsList))
+	content := container.NewBorder(topBar, bottomBar, nil, nil, container.NewVScroll(eventsContainer))
 	window.SetContent(content)
 
 	startCronJobs()
@@ -224,7 +224,7 @@ func refresh(retrieveEvents bool) {
 
 	expandedStates := getExpandedStates()
 
-	eventsList.RemoveAll()
+	eventsContainer.RemoveAll()
 	events, err := getEvents(retrieveEvents)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
@@ -247,7 +247,7 @@ func refresh(retrieveEvents bool) {
 
 func getExpandedStates() map[string]bool {
 	expandedState := make(map[string]bool)
-	for _, obj := range eventsList.Objects {
+	for _, obj := range eventsContainer.Objects {
 		if eventWidget, ok := obj.(*ui.Event); ok {
 			if eventWidget.IsOpen() {
 				expandedState[eventWidget.Id] = true
@@ -278,9 +278,9 @@ func getEvents(retrieveEvents bool) ([]event, error) {
 		}
 	}
 
-	updateInterval := float64(dailyApp.Preferences().IntWithFallback("calendar-update-interval", 5))
-	if !retrieveEvents && time.Since(lastFullRefresh).Minutes() > updateInterval {
-		slog.Debug("Overwriting retrieveEvents because update interval elapsed")
+	retrieveInterval := float64(dailyApp.Preferences().IntWithFallback("event-retrieve-interval", 5))
+	if !retrieveEvents && time.Since(lastFullRefresh).Minutes() > retrieveInterval {
+		slog.Debug("Overwriting retrieveEvents because event retrieval interval passed")
 		retrieveEvents = true
 	}
 
@@ -332,7 +332,7 @@ func processEvents(events []event, expandedState map[string]bool) {
 		const intervalDurationMinutes = 30
 		intervalsBetween := int(event.start.Sub(*lastEnd).Minutes()) / intervalDurationMinutes
 		for i := 0; i < intervalsBetween; i++ {
-			eventsList.Add(widget.NewSeparator())
+			eventsContainer.Add(widget.NewSeparator())
 		}
 		lastEnd = &event.end
 
@@ -375,10 +375,10 @@ func processEvents(events []event, expandedState map[string]bool) {
 		if expandedState[eventWidget.Id] {
 			eventWidget.Open()
 		}
-		eventsList.Add(eventWidget)
+		eventsContainer.Add(eventWidget)
 	}
 
-	eventsList.Refresh()
+	eventsContainer.Refresh()
 }
 
 func isLunchStarting() bool {
@@ -500,9 +500,9 @@ func isHTML(s string) bool {
 
 func showNoEvents() {
 	noEventsLabel := widget.NewLabel("No events today")
-	eventsList.Add(layout.NewSpacer())
-	eventsList.Add(container.NewCenter(noEventsLabel))
-	eventsList.Add(layout.NewSpacer())
+	eventsContainer.Add(layout.NewSpacer())
+	eventsContainer.Add(container.NewCenter(noEventsLabel))
+	eventsContainer.Add(layout.NewSpacer())
 }
 
 func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bool) {

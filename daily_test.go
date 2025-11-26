@@ -52,8 +52,8 @@ func TestProcessEvents_PreservesExpandedState(t *testing.T) {
 	window := test.NewWindow(nil)
 	defer window.Close()
 
-	eventsList = container.NewVBox()
-	window.SetContent(eventsList)
+	eventsContainer = container.NewVBox()
+	window.SetContent(eventsContainer)
 
 	now := time.Now()
 	testEvents := []event{
@@ -63,11 +63,11 @@ func TestProcessEvents_PreservesExpandedState(t *testing.T) {
 
 	// 1. Initial processing of events
 	processEvents(testEvents, make(map[string]bool))
-	assert.Len(t, eventsList.Objects, 2, "Should have two event widgets")
+	assert.Len(t, eventsContainer.Objects, 2, "Should have two event widgets")
 
 	// 2. Simulate expanding an event
 	var eventToExpand *ui.Event
-	for _, obj := range eventsList.Objects {
+	for _, obj := range eventsContainer.Objects {
 		if ev, ok := obj.(*ui.Event); ok && ev.Id == "event2" {
 			eventToExpand = ev
 			break
@@ -83,15 +83,15 @@ func TestProcessEvents_PreservesExpandedState(t *testing.T) {
 	expandedStates := getExpandedStates()
 	assert.Contains(t, expandedStates, "event2", "Expanded state for event2 should be saved")
 
-	eventsList.RemoveAll()
+	eventsContainer.RemoveAll()
 
 	// 3c. Repopulate the list using the saved state
 	processEvents(testEvents, expandedStates)
-	assert.Len(t, eventsList.Objects, 2, "Should have two event widgets after refresh")
+	assert.Len(t, eventsContainer.Objects, 2, "Should have two event widgets after refresh")
 
 	// 4. Verify the state is preserved in the new UI objects
 	var refreshedEvent *ui.Event
-	for _, obj := range eventsList.Objects {
+	for _, obj := range eventsContainer.Objects {
 		if ev, ok := obj.(*ui.Event); ok && ev.Id == "event2" {
 			refreshedEvent = ev
 			break
