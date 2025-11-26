@@ -4,6 +4,8 @@ Daily is a minimalist desktop application that provides a quick glance at your d
 Calendar to show your upcoming events in a clean, compact interface that sits in your system tray. With Daily, you can
 stay on top of your schedule without constantly checking your calendar.
 
+<img width="546" height="904" alt="image" src="https://github.com/user-attachments/assets/1ce43441-d145-4a8d-bced-3613bfdc32ae" />
+
 
 # Development
 ## Adding icons to bundle
