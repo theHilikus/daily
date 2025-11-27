@@ -36,7 +36,7 @@ func newDummyEventSource() EventSource {
 	}
 }
 
-func (dummy dummyEventSource) getEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
+func (dummy dummyEventSource) getDayEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
 	slog.Debug("Returning dummy events. Full refresh = " + strconv.FormatBool(fullRefresh))
 
 	var result []event

@@ -51,7 +51,7 @@ const dayFormat = "Mon, Jan 02"
 // EventSource An entity that can retrieve calendar events
 type EventSource interface {
 	// Gets a slice of events for the particular day specified
-	getEvents(time.Time, bool) ([]event, bool, error)
+	getDayEvents(time.Time, bool) ([]event, bool, error)
 }
 
 func main() {
@@ -284,13 +284,13 @@ func getEvents(retrieveEvents bool) ([]event, error) {
 		retrieveEvents = true
 	}
 
-	events, fullRefreshed, err := currentEventSource.getEvents(displayDay, retrieveEvents)
+	dayEvents, fullRefreshed, err := currentEventSource.getDayEvents(displayDay, retrieveEvents)
 
 	if fullRefreshed {
 		lastFullRefresh = time.Now()
 	}
 
-	return events, err
+	return dayEvents, err
 }
 
 func handleEventRetrievalError(err error) {

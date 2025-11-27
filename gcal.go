@@ -203,7 +203,7 @@ func newGoogleCalendarEventSource(calendarToken string) (EventSource, error) {
 	return &result, nil
 }
 
-func (gcal *googleCalendarSource) getEvents(day time.Time, forceRetrieve bool) ([]event, bool, error) {
+func (gcal *googleCalendarSource) getDayEvents(day time.Time, forceRetrieve bool) ([]event, bool, error) {
 	refreshed := false
 
 	if len(gcal.eventsBuffer) == 0 {
@@ -299,9 +299,18 @@ func (gcal *googleCalendarSource) retrieveEventsAround(day time.Time) error {
 
 	slog.Debug("Retrieved "+strconv.Itoa(len(response.Items))+" changed event(s) successfully", "calendarId", calendarId)
 
-	err2 := gcal.processResponseItems(isIncremental, response)
+	eventsMap, err2 := gcal.createEventsFromResponse(isIncremental, response)
 	if err2 != nil {
 		return err2
+	}
+
+	if len(response.Items) != len(eventsMap) {
+		slog.Debug("Kept " + strconv.Itoa(len(eventsMap)) + " event(s) to be used")
+	}
+
+	gcal.eventsBuffer = make([]event, 0, len(eventsMap))
+	for _, e := range eventsMap {
+		gcal.eventsBuffer = append(gcal.eventsBuffer, e)
 	}
 
 	slices.SortFunc(gcal.eventsBuffer, func(a, b event) int {
@@ -317,21 +326,21 @@ func (gcal *googleCalendarSource) retrieveEventsAround(day time.Time) error {
 	return nil
 }
 
-func (gcal *googleCalendarSource) processResponseItems(isIncremental bool, response *calendar.Events) error {
+func (gcal *googleCalendarSource) createEventsFromResponse(isIncremental bool, response *calendar.Events) (map[string]event, error) {
 	// Create a map to hold the final list of events.
 	// If it's an incremental sync, prepopulate it with the existing events.
 	// If it's a full sync, it will start empty, effectively replacing the old buffer.
-	finalEvents := make(map[string]event)
+	result := make(map[string]event)
 	if isIncremental {
 		for _, e := range gcal.eventsBuffer {
-			finalEvents[e.id] = e
+			result[e.id] = e
 		}
 	}
 
 	for _, item := range response.Items {
 		// If an event is "cancelled", it means it was deleted. Remove it from our map.
 		if item.Status == "cancelled" {
-			delete(finalEvents, item.Id)
+			delete(result, item.Id)
 			continue
 		}
 
@@ -339,12 +348,12 @@ func (gcal *googleCalendarSource) processResponseItems(isIncremental bool, respo
 			//for now, ignore day events
 			eventStart, err := time.Parse(time.RFC3339, item.Start.DateTime)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			eventEnd, err := time.Parse(time.RFC3339, item.End.DateTime)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			var selfResponse responseStatus
@@ -381,13 +390,9 @@ func (gcal *googleCalendarSource) processResponseItems(isIncremental bool, respo
 				newEvent.location = item.Location
 			}
 
-			finalEvents[newEvent.id] = newEvent
+			result[newEvent.id] = newEvent
 		}
 	}
 
-	gcal.eventsBuffer = make([]event, 0, len(finalEvents))
-	for _, e := range finalEvents {
-		gcal.eventsBuffer = append(gcal.eventsBuffer, e)
-	}
-	return nil
+	return result, nil
 }
