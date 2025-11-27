@@ -364,7 +364,7 @@ func (gcal *googleCalendarSource) createEventsFromResponse(isIncremental bool, r
 				}
 			}
 
-			notifiable := selfResponse != "declined" && item.Transparency != "transparent"
+			notifiable := selfResponse != "declined" && item.Transparency != "transparent" && eventStart.After(time.Now())
 			newEvent := event{
 				id:              item.Id,
 				title:           item.Summary,
