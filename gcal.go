@@ -364,17 +364,15 @@ func (gcal *googleCalendarSource) createEventsFromResponse(isIncremental bool, r
 				}
 			}
 
-			notifiable := selfResponse != "declined" && item.Transparency != "transparent" && eventStart.After(time.Now())
 			newEvent := event{
-				id:              item.Id,
-				title:           item.Summary,
-				start:           eventStart,
-				end:             eventEnd,
-				details:         item.Description,
-				notifiable:      notifiable,
-				notifiableEarly: notifiable,
-				response:        selfResponse,
-				recurring:       item.RecurringEventId != "",
+				id:         item.Id,
+				title:      item.Summary,
+				start:      eventStart,
+				end:        eventEnd,
+				details:    item.Description,
+				notifiable: selfResponse != "declined" && item.Transparency != "transparent" && eventStart.After(time.Now()),
+				response:   selfResponse,
+				recurring:  item.RecurringEventId != "",
 			}
 
 			if item.ConferenceData != nil {

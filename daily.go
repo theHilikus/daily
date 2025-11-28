@@ -32,14 +32,16 @@ import (
 )
 
 var (
-	displayDay      time.Time
-	eventsContainer *fyne.Container
-	testCalendar    = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
-	debugFlag       = flag.Bool("debug", false, "Enable debug mode")
-	lastFullRefresh time.Time
-	lastErrorButton *widget.Button
-	dayButton       *widget.Button
-	settingsWindow  fyne.Window
+	displayDay          time.Time
+	eventsContainer     *fyne.Container
+	testCalendar        = flag.Bool("test-calendar", false, "Whether to use a dummy calendar instead of retrieving events from the real one")
+	debugFlag           = flag.Bool("debug", false, "Enable debug mode")
+	lastFullRefresh     time.Time
+	lastErrorButton     *widget.Button
+	dayButton           *widget.Button
+	settingsWindow      fyne.Window
+	eventsNotified      = make(map[string]struct{})
+	eventsNotifiedEarly = make(map[string]struct{})
 
 	currentEventSource EventSource
 	dailyApp           fyne.App
@@ -351,17 +353,19 @@ func processEvents(events []event, expandedState map[string]bool) {
 		}
 
 		notified := false
-		if event.notifiable {
+		_, alreadyNotified := eventsNotified[event.id]
+		if event.notifiable && !alreadyNotified {
 			notified = notifyIfNeeded(event, notificationTime, true)
 			if notified {
-				event.notifiable = false
-				event.notifiableEarly = false
+				eventsNotified[event.id] = struct{}{}
+				eventsNotifiedEarly[event.id] = struct{}{}
 			}
 		}
-		if event.notifiableEarly && lunchStarting {
+		_, alreadyNotifiedEarly := eventsNotifiedEarly[event.id]
+		if event.notifiable && !alreadyNotifiedEarly && lunchStarting {
 			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, false)
 			if notifiedEarly {
-				event.notifiableEarly = false
+				eventsNotifiedEarly[event.id] = struct{}{}
 			}
 		}
 
@@ -594,16 +598,15 @@ func isOnSameDay(one time.Time, other time.Time) bool {
 }
 
 type event struct {
-	id              string
-	title           string
-	start           time.Time
-	end             time.Time
-	location        string
-	details         string
-	notifiable      bool
-	notifiableEarly bool
-	response        responseStatus
-	recurring       bool
+	id         string
+	title      string
+	start      time.Time
+	end        time.Time
+	location   string
+	details    string
+	notifiable bool
+	response   responseStatus
+	recurring  bool
 }
 
 type responseStatus string
