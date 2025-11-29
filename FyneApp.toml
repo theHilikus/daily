@@ -4,5 +4,5 @@ Website = "https://github.com/theHilikus/daily"
   Icon = "internal/assets/icons/app-icon.png"
   Name = "Daily"
   ID = "com.github.theHilikus.daily"
-  Version = "1.1.0"
+  Version = "1.2.0"
   Build = 1
