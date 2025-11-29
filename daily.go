@@ -253,6 +253,7 @@ func refreshEvents() {
 		var err error
 		currentEventSource, err = createEventSource()
 		if err != nil {
+			handleEventRetrievalError(err)
 			return
 		}
 	}
@@ -380,6 +381,10 @@ func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bo
 
 func refreshUI() {
 	slog.Debug("Refreshing UI for date " + displayDay.Format("2006-01-02"))
+	if currentEventSource == nil {
+		slog.Warn("No event source found. Cannot refresh UI")
+		return
+	}
 
 	if isOnSameDay(displayDay, time.Now()) {
 		dayButton.Importance = widget.HighImportance
@@ -562,6 +567,7 @@ func isHTML(s string) bool {
 
 func showNoEvents() {
 	noEventsLabel := widget.NewLabel("No events today")
+	eventsContainer.RemoveAll()
 	eventsContainer.Add(layout.NewSpacer())
 	eventsContainer.Add(container.NewCenter(noEventsLabel))
 	eventsContainer.Add(layout.NewSpacer())
