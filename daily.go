@@ -219,17 +219,7 @@ func startCronJobs() {
 	cronHandler := cron.New()
 	_, err := cronHandler.AddFunc("* * * * *", func() {
 		fyne.Do(func() {
-			retrieveInterval := float64(dailyApp.Preferences().IntWithFallback("event-retrieve-interval", 5))
-			if time.Since(lastFullRefresh).Minutes() > retrieveInterval {
-				slog.Debug("Overwriting retrieveEvents because event retrieval interval passed")
-				refreshEvents()
-			} else {
-				events, err := currentEventSource.getDayEvents(time.Now(), false)
-				if err == nil {
-					processNotifications(events)
-				}
-			}
-			refreshUI()
+			tick()
 		})
 	})
 	if err != nil {
@@ -240,6 +230,20 @@ func startCronJobs() {
 		slog.Error("Could not add cron job", "error", err2)
 	}
 	cronHandler.Start()
+}
+
+func tick() {
+	retrieveInterval := float64(dailyApp.Preferences().IntWithFallback("event-retrieve-interval", 5))
+	if time.Since(lastFullRefresh).Minutes() > retrieveInterval {
+		slog.Debug("Overwriting retrieveEvents because event retrieval interval passed")
+		refreshEvents()
+	} else {
+		events, err := currentEventSource.getDayEvents(time.Now(), false)
+		if err == nil {
+			processNotifications(events)
+		}
+	}
+	refreshUI()
 }
 
 func refreshEvents() {
@@ -291,6 +295,31 @@ func createEventSource() (EventSource, error) {
 	return result, nil
 }
 
+func handleEventRetrievalError(err error) {
+	slog.Error("Could not retrieve calendar events", "error", err)
+
+	userErrorMessage := "Could not retrieve calendar events:\n"
+	switch e := err.(type) {
+	case *googleapi.Error:
+		userErrorMessage += e.Message
+	case *url.Error:
+		userErrorMessage += e.Err.Error()
+	default:
+		userErrorMessage += err.Error()
+	}
+
+	reportUserError(userErrorMessage)
+	showNoEvents()
+}
+
+func reportUserError(errorMessage string) {
+	slog.Info("Reporting user error: " + errorMessage)
+	lastErrorButton.Hidden = false
+	lastErrorButton.OnTapped = func() {
+		dialog.ShowError(errors.New(errorMessage), dailyApp.Driver().AllWindows()[0])
+	}
+}
+
 func processNotifications(events []event) {
 	slog.Debug("Processing notifications")
 	notificationTime := float64(dailyApp.Preferences().IntWithFallback("notification-time", 1))
@@ -316,6 +345,37 @@ func processNotifications(events []event) {
 			}
 		}
 	}
+}
+
+func notifyIfNeeded(event *event, notificationTime float64, addMeetingLink bool) bool {
+	result := false
+	timeToStart := time.Until(event.start)
+	if timeToStart.Minutes() <= notificationTime {
+		sendNotification(event, timeToStart, addMeetingLink)
+		result = true
+	}
+
+	return result
+}
+
+func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bool) {
+	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
+	remaining := int(timeToStart.Round(time.Minute).Minutes())
+	notifTitle := "'" + event.title + "' is starting soon"
+	notifBody := strconv.Itoa(remaining) + " minutes to event"
+	if remaining > 10 {
+		notifTitle = "Early notification for '" + event.title + "'"
+	} else if remaining == 1 {
+		notifBody = strconv.Itoa(remaining) + " minute to event"
+	} else if remaining <= 0 {
+		notifTitle = "'" + event.title + "' started"
+	}
+
+	var meetingLink string
+	if addMeetingLink && event.isVirtualMeeting() {
+		meetingLink = event.location
+	}
+	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
 }
 
 func refreshUI() {
@@ -393,31 +453,6 @@ func getExpandedStates() map[string]bool {
 	return expandedState
 }
 
-func handleEventRetrievalError(err error) {
-	slog.Error("Could not retrieve calendar events", "error", err)
-
-	userErrorMessage := "Could not retrieve calendar events:\n"
-	switch e := err.(type) {
-	case *googleapi.Error:
-		userErrorMessage += e.Message
-	case *url.Error:
-		userErrorMessage += e.Err.Error()
-	default:
-		userErrorMessage += err.Error()
-	}
-
-	reportUserError(userErrorMessage)
-	showNoEvents()
-}
-
-func reportUserError(errorMessage string) {
-	slog.Info("Reporting user error: " + errorMessage)
-	lastErrorButton.Hidden = false
-	lastErrorButton.OnTapped = func() {
-		dialog.ShowError(errors.New(errorMessage), dailyApp.Driver().AllWindows()[0])
-	}
-}
-
 func isLunchStarting() bool {
 	lunchStartHour := dailyApp.Preferences().IntWithFallback("lunch-start-hour", 12)
 	now := time.Now()
@@ -449,17 +484,6 @@ func createEventTitle(event *event) *ui.ClickableText {
 
 	title := ui.NewClickableText(eventText, eventStyle, eventColour)
 	return title
-}
-
-func notifyIfNeeded(event *event, notificationTime float64, addMeetingLink bool) bool {
-	result := false
-	timeToStart := time.Until(event.start)
-	if timeToStart.Minutes() <= notificationTime {
-		sendNotification(event, timeToStart, addMeetingLink)
-		result = true
-	}
-
-	return result
 }
 
 func createUserFriendlyDurationText(durationRemaining time.Duration) string {
@@ -541,26 +565,6 @@ func showNoEvents() {
 	eventsContainer.Add(layout.NewSpacer())
 	eventsContainer.Add(container.NewCenter(noEventsLabel))
 	eventsContainer.Add(layout.NewSpacer())
-}
-
-func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bool) {
-	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
-	remaining := int(timeToStart.Round(time.Minute).Minutes())
-	notifTitle := "'" + event.title + "' is starting soon"
-	notifBody := strconv.Itoa(remaining) + " minutes to event"
-	if remaining > 10 {
-		notifTitle = "Early notification for '" + event.title + "'"
-	} else if remaining == 1 {
-		notifBody = strconv.Itoa(remaining) + " minute to event"
-	} else if remaining <= 0 {
-		notifTitle = "'" + event.title + "' started"
-	}
-
-	var meetingLink string
-	if addMeetingLink && event.isVirtualMeeting() {
-		meetingLink = event.location
-	}
-	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
 }
 
 func showSettings(dailyApp fyne.App) {
