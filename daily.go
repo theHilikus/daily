@@ -50,10 +50,32 @@ var (
 
 const dayFormat = "Mon, Jan 02"
 
+type event struct {
+	id         string
+	title      string
+	start      time.Time
+	end        time.Time
+	location   string
+	details    string
+	notifiable bool
+	response   responseStatus
+	recurring  bool
+}
+
+type responseStatus string
+
+const (
+	empty       responseStatus = ""
+	needsAction responseStatus = "needsAction"
+	declined    responseStatus = "declined"
+	tentative   responseStatus = "tentative"
+	accepted    responseStatus = "accepted"
+)
+
 // EventSource An entity that can retrieve calendar events
 type EventSource interface {
 	// Gets a slice of events for the particular day specified
-	getDayEvents(time.Time, bool) ([]event, bool, error)
+	getDayEvents(time.Time, bool) ([]event, error)
 }
 
 func main() {
@@ -64,7 +86,8 @@ func main() {
 
 	calendarId := dailyApp.Preferences().String("calendar-id")
 	if calendarId != "" {
-		refresh(true)
+		refreshEvents()
+		refreshUI()
 	} else {
 		slog.Info("Calendar config not found. Starting in Settings UI")
 		showSettings(dailyApp)
@@ -179,7 +202,7 @@ func createToolbar() *fyne.Container {
 	lastErrorButton = widget.NewButtonWithIcon("", theme.ErrorIcon(), func() {})
 	lastErrorButton.Importance = widget.DangerImportance
 	lastErrorButton.Hidden = true
-	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { refresh(true) })
+	refreshButton := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { refreshEvents(); refreshUI() })
 	settingsButton := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() { showSettings(dailyApp) })
 	toolbar := container.NewHBox(layout.NewSpacer(), notifTestButton, lastErrorButton, refreshButton, settingsButton)
 	return toolbar
@@ -189,14 +212,24 @@ func changeDay(newDate time.Time, dayButton *widget.Button) {
 	slog.Info("Changing day to " + newDate.Format(dayFormat))
 	displayDay = newDate
 	dayButton.SetText(displayDay.Format(dayFormat))
-	refresh(false)
+	refreshUI()
 }
 
 func startCronJobs() {
 	cronHandler := cron.New()
 	_, err := cronHandler.AddFunc("* * * * *", func() {
 		fyne.Do(func() {
-			refresh(false)
+			retrieveInterval := float64(dailyApp.Preferences().IntWithFallback("event-retrieve-interval", 5))
+			if time.Since(lastFullRefresh).Minutes() > retrieveInterval {
+				slog.Debug("Overwriting retrieveEvents because event retrieval interval passed")
+				refreshEvents()
+			} else {
+				events, err := currentEventSource.getDayEvents(time.Now(), false)
+				if err == nil {
+					processNotifications(events)
+				}
+			}
+			refreshUI()
 		})
 	})
 	if err != nil {
@@ -209,13 +242,84 @@ func startCronJobs() {
 	cronHandler.Start()
 }
 
-func refresh(retrieveEvents bool) {
-	msg := "Refreshing UI for date " + displayDay.Format("2006-01-02") + ". retrieveEvents = " + strconv.FormatBool(retrieveEvents)
-	if retrieveEvents {
-		slog.Info(msg)
-	} else {
-		slog.Debug(msg)
+func refreshEvents() {
+	slog.Info("Refreshing events")
+	if currentEventSource == nil {
+		slog.Info("No event source found. Creating one")
+		var err error
+		currentEventSource, err = createEventSource()
+		if err != nil {
+			return
+		}
 	}
+	events, err := currentEventSource.getDayEvents(time.Now(), true)
+
+	if err != nil {
+		if errors.Is(err, keyring.ErrNotFound) {
+			slog.Warn("Not refreshing. No calendar-token found")
+		}
+		handleEventRetrievalError(err)
+	} else {
+		if !lastErrorButton.Hidden {
+			slog.Info("Clearing last user error")
+			lastErrorButton.Hidden = true
+		}
+		lastFullRefresh = time.Now()
+		processNotifications(events)
+	}
+}
+
+func createEventSource() (EventSource, error) {
+	var result EventSource
+	if *testCalendar {
+		result = newDummyEventSource()
+	} else {
+		var err error
+		calendarToken, err := keyring.Get("theHilikus-daily-app", "calendar-token")
+		if err != nil {
+			return nil, err
+		}
+		if calendarToken == "" {
+			return nil, errors.New("empty token")
+		}
+		result, err = newGoogleCalendarEventSource(calendarToken)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+func processNotifications(events []event) {
+	slog.Debug("Processing notifications")
+	notificationTime := float64(dailyApp.Preferences().IntWithFallback("notification-time", 1))
+	earlyNotificationTime := float64(dailyApp.Preferences().IntWithFallback("early-notification-time", 90))
+	lunchStarting := isLunchStarting()
+
+	for pos := range events {
+		event := &events[pos]
+
+		_, alreadyNotified := eventsNotified[event.id]
+		if event.notifiable && !alreadyNotified {
+			notified := notifyIfNeeded(event, notificationTime, true)
+			if notified {
+				eventsNotified[event.id] = struct{}{}
+				eventsNotifiedEarly[event.id] = struct{}{}
+			}
+		}
+		_, alreadyNotifiedEarly := eventsNotifiedEarly[event.id]
+		if event.notifiable && !alreadyNotifiedEarly && lunchStarting {
+			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, false)
+			if notifiedEarly {
+				eventsNotifiedEarly[event.id] = struct{}{}
+			}
+		}
+	}
+}
+
+func refreshUI() {
+	slog.Debug("Refreshing UI for date " + displayDay.Format("2006-01-02"))
 
 	if isOnSameDay(displayDay, time.Now()) {
 		dayButton.Importance = widget.HighImportance
@@ -227,24 +331,54 @@ func refresh(retrieveEvents bool) {
 	expandedStates := getExpandedStates()
 
 	eventsContainer.RemoveAll()
-	events, err := getEvents(retrieveEvents)
-	if err != nil {
-		if errors.Is(err, keyring.ErrNotFound) {
-			slog.Warn("Not refreshing. No calendar-token found")
-			return
-		}
-		handleEventRetrievalError(err)
-		return
-	} else if !lastErrorButton.Hidden {
-		slog.Info("Clearing last user error")
-		lastErrorButton.Hidden = true
-	}
 
-	if len(events) == 0 {
+	dayEvents, _ := currentEventSource.getDayEvents(displayDay, false)
+
+	if len(dayEvents) == 0 {
 		showNoEvents()
 	}
 
-	processEvents(events, expandedStates)
+	var lastEnd *time.Time
+	for pos := range dayEvents {
+		event := &dayEvents[pos]
+		if lastEnd == nil {
+			lastEnd = &event.start
+		}
+		const intervalDurationMinutes = 30
+		intervalsBetween := int(event.start.Sub(*lastEnd).Minutes()) / intervalDurationMinutes
+		for i := 0; i < intervalsBetween; i++ {
+			eventsContainer.Add(widget.NewSeparator())
+		}
+		lastEnd = &event.end
+
+		title := createEventTitle(event)
+
+		var responseIcon *widget.Icon
+		switch event.response {
+		case needsAction:
+			responseIcon = widget.NewIcon(ui.ResourceWarningPng)
+		case declined:
+			responseIcon = widget.NewIcon(ui.ResourceCancelPng)
+		case tentative:
+			responseIcon = widget.NewIcon(ui.ResourceQuestionPng)
+		case accepted, empty:
+			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
+		}
+
+		buttons := createEventButtons(event)
+
+		cleanedDetails := cleanEventDetails(event.details)
+		detailsWidget := widget.NewRichTextFromMarkdown(cleanedDetails)
+		detailsWidget.Wrapping = fyne.TextWrapWord
+
+		eventWidget := ui.NewEvent(event.id, responseIcon, title, buttons, detailsWidget)
+		if expandedStates[eventWidget.Id] {
+			eventWidget.Open()
+		}
+		eventsContainer.Add(eventWidget)
+	}
+
+	eventsContainer.Refresh()
 }
 
 func getExpandedStates() map[string]bool {
@@ -257,42 +391,6 @@ func getExpandedStates() map[string]bool {
 		}
 	}
 	return expandedState
-}
-
-func getEvents(retrieveEvents bool) ([]event, error) {
-	if currentEventSource == nil {
-		slog.Info("No event source found. Creating one")
-		if *testCalendar {
-			currentEventSource = newDummyEventSource()
-		} else {
-			var err error
-			calendarToken, err := keyring.Get("theHilikus-daily-app", "calendar-token")
-			if err != nil {
-				return nil, err
-			}
-			if calendarToken == "" {
-				return nil, errors.New("empty token")
-			}
-			currentEventSource, err = newGoogleCalendarEventSource(calendarToken)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	retrieveInterval := float64(dailyApp.Preferences().IntWithFallback("event-retrieve-interval", 5))
-	if !retrieveEvents && time.Since(lastFullRefresh).Minutes() > retrieveInterval {
-		slog.Debug("Overwriting retrieveEvents because event retrieval interval passed")
-		retrieveEvents = true
-	}
-
-	dayEvents, fullRefreshed, err := currentEventSource.getDayEvents(displayDay, retrieveEvents)
-
-	if fullRefreshed {
-		lastFullRefresh = time.Now()
-	}
-
-	return dayEvents, err
 }
 
 func handleEventRetrievalError(err error) {
@@ -318,71 +416,6 @@ func reportUserError(errorMessage string) {
 	lastErrorButton.OnTapped = func() {
 		dialog.ShowError(errors.New(errorMessage), dailyApp.Driver().AllWindows()[0])
 	}
-}
-
-func processEvents(events []event, expandedState map[string]bool) {
-	var lastEnd *time.Time
-	notificationTime := float64(dailyApp.Preferences().IntWithFallback("notification-time", 1))
-	earlyNotificationTime := float64(dailyApp.Preferences().IntWithFallback("early-notification-time", 90))
-	lunchStarting := isLunchStarting()
-
-	for pos := range events {
-		event := &events[pos]
-		if lastEnd == nil {
-			lastEnd = &event.start
-		}
-		const intervalDurationMinutes = 30
-		intervalsBetween := int(event.start.Sub(*lastEnd).Minutes()) / intervalDurationMinutes
-		for i := 0; i < intervalsBetween; i++ {
-			eventsContainer.Add(widget.NewSeparator())
-		}
-		lastEnd = &event.end
-
-		title := createEventTitle(event)
-
-		var responseIcon *widget.Icon
-		switch event.response {
-		case needsAction:
-			responseIcon = widget.NewIcon(ui.ResourceWarningPng)
-		case declined:
-			responseIcon = widget.NewIcon(ui.ResourceCancelPng)
-		case tentative:
-			responseIcon = widget.NewIcon(ui.ResourceQuestionPng)
-		case accepted, empty:
-			responseIcon = widget.NewIcon(ui.ResourceCheckedPng)
-		}
-
-		notified := false
-		_, alreadyNotified := eventsNotified[event.id]
-		if event.notifiable && !alreadyNotified {
-			notified = notifyIfNeeded(event, notificationTime, true)
-			if notified {
-				eventsNotified[event.id] = struct{}{}
-				eventsNotifiedEarly[event.id] = struct{}{}
-			}
-		}
-		_, alreadyNotifiedEarly := eventsNotifiedEarly[event.id]
-		if event.notifiable && !alreadyNotifiedEarly && lunchStarting {
-			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, false)
-			if notifiedEarly {
-				eventsNotifiedEarly[event.id] = struct{}{}
-			}
-		}
-
-		buttons := createEventButtons(event, notified)
-
-		cleanedDetails := cleanEventDetails(event.details)
-		detailsWidget := widget.NewRichTextFromMarkdown(cleanedDetails)
-		detailsWidget.Wrapping = fyne.TextWrapWord
-
-		eventWidget := ui.NewEvent(event.id, responseIcon, title, buttons, detailsWidget)
-		if expandedState[eventWidget.Id] {
-			eventWidget.Open()
-		}
-		eventsContainer.Add(eventWidget)
-	}
-
-	eventsContainer.Refresh()
 }
 
 func isLunchStarting() bool {
@@ -444,7 +477,7 @@ func createUserFriendlyDurationText(durationRemaining time.Duration) string {
 	return result
 }
 
-func createEventButtons(event *event, notified bool) []*widget.Button {
+func createEventButtons(event *event) []*widget.Button {
 	var buttons []*widget.Button
 	if event.isVirtualMeeting() {
 		locationUrl, err := url.Parse(event.location)
@@ -456,9 +489,10 @@ func createEventButtons(event *event, notified bool) []*widget.Button {
 					return
 				}
 			})
+			until := time.Until(event.start)
 			if event.isFinished() {
 				meetingButton.Disable()
-			} else if notified || event.isStarted() {
+			} else if until.Minutes() <= 1 || event.isStarted() {
 				meetingButton.Importance = widget.HighImportance
 			}
 			buttons = append(buttons, meetingButton)
@@ -567,7 +601,8 @@ func showSettings(dailyApp fyne.App) {
 				return
 			}
 			currentEventSource = nil // blank it so that it gets re-instantiated with the new token
-			refresh(true)
+			refreshEvents()
+			refreshUI()
 		}
 
 		slog.Info("Preferences saved")
@@ -596,28 +631,6 @@ func isOnSameDay(one time.Time, other time.Time) bool {
 	year2, month2, day2 := other.Date()
 	return year1 == year2 && month1 == month2 && day1 == day2
 }
-
-type event struct {
-	id         string
-	title      string
-	start      time.Time
-	end        time.Time
-	location   string
-	details    string
-	notifiable bool
-	response   responseStatus
-	recurring  bool
-}
-
-type responseStatus string
-
-const (
-	empty       responseStatus = ""
-	needsAction responseStatus = "needsAction"
-	declined    responseStatus = "declined"
-	tentative   responseStatus = "tentative"
-	accepted    responseStatus = "accepted"
-)
 
 func (otherEvent *event) isFinished() bool {
 	return otherEvent.end.Before(time.Now())

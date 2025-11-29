@@ -203,14 +203,15 @@ func newGoogleCalendarEventSource(calendarToken string) (EventSource, error) {
 	return &result, nil
 }
 
-func (gcal *googleCalendarSource) getDayEvents(day time.Time, forceRetrieve bool) ([]event, bool, error) {
+// gets the events from the buffer unless forceRetrieve is true or the buffer is empty or too close to the requested date
+func (gcal *googleCalendarSource) getDayEvents(day time.Time, forceRetrieve bool) ([]event, error) {
 	refreshed := false
 
 	if len(gcal.eventsBuffer) == 0 {
 		slog.Debug("Events buffer is empty")
 		err := gcal.retrieveEventsAround(day)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		refreshed = true
 	}
@@ -219,16 +220,16 @@ func (gcal *googleCalendarSource) getDayEvents(day time.Time, forceRetrieve bool
 
 	if int(day.Sub(gcal.requestStartDate).Hours()/24) < minBufferThreshold {
 		slog.Debug("Too close to buffer start")
-		err := gcal.retrieveEventsAround(gcal.requestStartDate)
+		err := gcal.retrieveEventsAround(day)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		refreshed = true
 	} else if int(gcal.requestEndDate.Sub(day).Hours()/24) < minBufferThreshold {
 		slog.Debug("Too close to buffer end")
-		err := gcal.retrieveEventsAround(gcal.requestEndDate)
+		err := gcal.retrieveEventsAround(day)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		refreshed = true
 	}
@@ -237,7 +238,7 @@ func (gcal *googleCalendarSource) getDayEvents(day time.Time, forceRetrieve bool
 		slog.Debug("Forcing retrieval of events")
 		err := gcal.retrieveEventsAround(day)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		refreshed = true
 	}
@@ -249,7 +250,7 @@ func (gcal *googleCalendarSource) getDayEvents(day time.Time, forceRetrieve bool
 		}
 	}
 
-	return result, refreshed, nil
+	return result, nil
 }
 
 func (gcal *googleCalendarSource) retrieveEventsAround(day time.Time) error {
@@ -271,8 +272,7 @@ func (gcal *googleCalendarSource) retrieveEventsAround(day time.Time) error {
 		listCall.SyncToken(syncToken)
 	} else {
 		slog.Debug("Performing full sync")
-		listCall.TimeMin(gcal.requestStartDate.Format(time.RFC3339)).
-			TimeMax(gcal.requestEndDate.Format(time.RFC3339))
+		listCall.TimeMin(gcal.requestStartDate.Format(time.RFC3339)).TimeMax(gcal.requestEndDate.Format(time.RFC3339))
 	}
 
 	response, err := listCall.

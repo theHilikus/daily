@@ -7,6 +7,7 @@ import (
 
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/theHilikus/daily/internal/ui"
@@ -60,9 +61,12 @@ func TestProcessEvents_PreservesExpandedState(t *testing.T) {
 		{id: "event1", title: "Event 1", start: now, end: now.Add(time.Hour), details: "details1"},
 		{id: "event2", title: "Event 2", start: now.Add(time.Hour), end: now.Add(2 * time.Hour), details: "details2"},
 	}
+	currentEventSource = newDummyEventSourceWithTodayEvents(testEvents)
+	dayButton = &widget.Button{}
+	displayDay = now
 
 	// 1. Initial processing of events
-	processEvents(testEvents, make(map[string]bool))
+	refreshUI()
 	assert.Len(t, eventsContainer.Objects, 2, "Should have two event widgets")
 
 	// 2. Simulate expanding an event
@@ -83,10 +87,8 @@ func TestProcessEvents_PreservesExpandedState(t *testing.T) {
 	expandedStates := getExpandedStates()
 	assert.Contains(t, expandedStates, "event2", "Expanded state for event2 should be saved")
 
-	eventsContainer.RemoveAll()
-
 	// 3c. Repopulate the list using the saved state
-	processEvents(testEvents, expandedStates)
+	refreshUI()
 	assert.Len(t, eventsContainer.Objects, 2, "Should have two event widgets after refresh")
 
 	// 4. Verify the state is preserved in the new UI objects

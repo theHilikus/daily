@@ -36,7 +36,14 @@ func newDummyEventSource() EventSource {
 	}
 }
 
-func (dummy dummyEventSource) getDayEvents(day time.Time, fullRefresh bool) ([]event, bool, error) {
+func newDummyEventSourceWithTodayEvents(todayEvents []event) EventSource {
+	now := time.Now().Truncate(time.Minute)
+	return &dummyEventSource{
+		originalNow: now,
+		today:       todayEvents}
+}
+
+func (dummy dummyEventSource) getDayEvents(day time.Time, fullRefresh bool) ([]event, error) {
 	slog.Debug("Returning dummy events. Full refresh = " + strconv.FormatBool(fullRefresh))
 
 	var result []event
@@ -50,5 +57,5 @@ func (dummy dummyEventSource) getDayEvents(day time.Time, fullRefresh bool) ([]e
 		result = dummy.tomorrow
 	}
 
-	return result, fullRefresh, nil
+	return result, nil
 }
