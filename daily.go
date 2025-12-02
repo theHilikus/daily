@@ -370,6 +370,7 @@ func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bo
 		notifBody = strconv.Itoa(remaining) + " minute to event"
 	} else if remaining <= 0 {
 		notifTitle = "'" + event.title + "' started"
+		notifBody = "Event started " + strconv.Itoa(remaining*-1) + " minutes ago"
 	}
 
 	var meetingLink string
