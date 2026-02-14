@@ -196,7 +196,7 @@ func createToolbar() *fyne.Container {
 		if notifCount%2 == 0 {
 			link = "https://www.example.com/meeting/123?foo=bar&baz=qux"
 		}
-		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link)
+		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link, ui.ResourceAppIconPng)
 	})
 	notifTestButton.Hidden = !*debugFlag
 	lastErrorButton = widget.NewButtonWithIcon("", theme.ErrorIcon(), func() {})
@@ -364,8 +364,10 @@ func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bo
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
 	notifBody := strconv.Itoa(remaining) + " minutes to event"
+	icon := ui.ResourceAppIconPng
 	if remaining > 10 {
 		notifTitle = "Early notification for '" + event.title + "'"
+		icon = ui.ResourceEarlyNotificationPng
 	} else if remaining == 1 {
 		notifBody = strconv.Itoa(remaining) + " minute to event"
 	} else if remaining <= 0 {
@@ -377,7 +379,7 @@ func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bo
 	if addMeetingLink && event.isVirtualMeeting() {
 		meetingLink = event.location
 	}
-	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
+	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink, icon)
 }
 
 func refreshUI() {

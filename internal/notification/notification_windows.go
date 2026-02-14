@@ -91,7 +91,7 @@ $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
     `)
 }
 
-func SendNotification(app fyne.App, title, message string, meetingLink string) {
+func SendNotification(app fyne.App, title, message string, meetingLink string, icon fyne.Resource) {
 	slog.Info("Using Windows-specific notification.")
 
 	actions := []action{}
@@ -102,12 +102,14 @@ func SendNotification(app fyne.App, title, message string, meetingLink string) {
 	}
 	actions = append(actions, action{Type: "protocol", Label: "Dismiss"})
 
+	tmpDir := os.TempDir()
+	iconPath := filepath.Join(tmpDir, app.UniqueID()+"-"+icon.Name())
 	notification := notification{
 		AppID:   app.Metadata().Name,
 		Title:   title,
 		Message: message,
 		Actions: actions,
-		Icon:    dumpIcon(app),
+		Icon:    dumpIcon(icon, iconPath),
 	}
 
 	slog.Debug("Sending notification", "data", notification)
@@ -145,16 +147,12 @@ func (n *notification) buildXML() (string, error) {
 	return out.String(), nil
 }
 
-func dumpIcon(app fyne.App) string {
-	tmpDir := os.TempDir()
-	iconPath := filepath.Join(tmpDir, app.UniqueID()+"-"+app.Metadata().Icon.Name())
-
+func dumpIcon(icon fyne.Resource, iconPath string) string {
 	if _, err := os.Stat(iconPath); err == nil {
 		return iconPath
 	}
 
-	resource := app.Icon()
-	if resource == nil {
+	if icon == nil {
 		return ""
 	}
 
@@ -165,7 +163,7 @@ func dumpIcon(app fyne.App) string {
 	}
 	defer iconFile.Close()
 
-	_, err = iconFile.Write(resource.Content())
+	_, err = iconFile.Write(icon.Content())
 	if err != nil {
 		slog.Error("Failed to write icon content", "error", err)
 		return ""
