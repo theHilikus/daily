@@ -5,14 +5,15 @@ package notification
 import (
 	"bytes"
 	"fmt"
-	"fyne.io/fyne/v2"
-	"golang.org/x/sys/windows"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"text/template"
 	"unsafe"
+
+	"fyne.io/fyne/v2"
+	"golang.org/x/sys/windows"
 
 	"encoding/xml"
 	"syscall"
@@ -53,7 +54,7 @@ type action struct {
 
 func init() {
 	toastTemplate = template.New("toast")
-	toastTemplate.Parse(`
+	_, err := toastTemplate.Parse(`
 $ErrorActionPreference = "Stop"
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
@@ -89,15 +90,22 @@ $xml.LoadXml($template)
 $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($APP_ID).Show($toast)
     `)
+	if err != nil {
+		slog.Error("Failed to parse toast template", "error", err)
+	}
 }
 
 func SendNotification(app fyne.App, title, message string, meetingLink string, icon fyne.Resource) {
 	slog.Info("Using Windows-specific notification.")
 
-	actions := []action{}
+	var actions []action
 	if meetingLink != "" {
 		buf := &bytes.Buffer{}
-		xml.EscapeText(buf, []byte(meetingLink))
+		err := xml.EscapeText(buf, []byte(meetingLink))
+		if err != nil {
+			slog.Error("Failed to escape meeting link", "error", err)
+			return
+		}
 		actions = append(actions, action{Type: "protocol", Label: "Launch Meeting", Arguments: buf.String()})
 	}
 	actions = append(actions, action{Type: "protocol", Label: "Dismiss"})
@@ -125,11 +133,11 @@ func (n *notification) push() error {
 		return err
 	}
 	n.applyDefaults()
-	xml, err := n.buildXML()
+	builtXml, err := n.buildXML()
 	if err != nil {
 		return err
 	}
-	return runScript("notification", xml)
+	return runScript("notification", builtXml)
 }
 
 func (n *notification) applyDefaults() {
@@ -149,6 +157,7 @@ func (n *notification) buildXML() (string, error) {
 
 func dumpIcon(icon fyne.Resource, iconPath string) string {
 	if _, err := os.Stat(iconPath); err == nil {
+		slog.Debug("Not dumping icon. It already exists", "path", iconPath)
 		return iconPath
 	}
 
@@ -161,7 +170,12 @@ func dumpIcon(icon fyne.Resource, iconPath string) string {
 		slog.Error("Failed to create icon file", "error", err)
 		return ""
 	}
-	defer iconFile.Close()
+	defer func(iconFile *os.File) {
+		err := iconFile.Close()
+		if err != nil {
+			slog.Error("Failed to close icon file", "error", err)
+		}
+	}(iconFile)
 
 	_, err = iconFile.Write(icon.Content())
 	if err != nil {
@@ -184,7 +198,12 @@ func runScript(name, script string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmpFilePath)
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			slog.Error("Failed to remove temporary file", "error", err)
+		}
+	}(tmpFilePath)
 
 	launch := "(Get-Content -Encoding UTF8 -Path " + tmpFilePath + " -Raw) | Invoke-Expression"
 	cmd := exec.Command("PowerShell", "-ExecutionPolicy", "Bypass", launch)
@@ -204,10 +223,10 @@ func runScript(name, script string) error {
 
 func playCalendarReminderSound() error {
 	const (
-		// SND_ALIAS specifies that the sound parameter is a system-event alias.
-		SND_ALIAS = 0x10000
-		// SND_ASYNC plays the sound asynchronously.
-		SND_ASYNC = 0x0001
+		// SndAlias specifies that the sound parameter is a system-event alias.
+		SndAlias = 0x10000
+		// SndAsync plays the sound asynchronously.
+		SndAsync = 0x0001
 	)
 
 	soundAlias := "Notification.Reminder"
@@ -227,7 +246,7 @@ func playCalendarReminderSound() error {
 	ret, _, err := playSound.Call(
 		uintptr(unsafe.Pointer(soundPtr)),
 		0,
-		SND_ALIAS|SND_ASYNC,
+		SndAlias|SndAsync,
 	)
 
 	if ret == 0 {
