@@ -196,7 +196,7 @@ func createToolbar() *fyne.Container {
 		if notifCount%2 == 0 {
 			link = "https://www.example.com/meeting/123?foo=bar&baz=qux"
 		}
-		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link)
+		notification.SendNotification(dailyApp, "Test notification", "This is a test notification", link, ui.ResourceAppIconPng)
 	})
 	notifTestButton.Hidden = !*debugFlag
 	lastErrorButton = widget.NewButtonWithIcon("", theme.ErrorIcon(), func() {})
@@ -332,7 +332,7 @@ func processNotifications(events []event) {
 
 		_, alreadyNotified := eventsNotified[event.id]
 		if event.notifiable && !alreadyNotified {
-			notified := notifyIfNeeded(event, notificationTime, true)
+			notified := notifyIfNeeded(event, notificationTime, false)
 			if notified {
 				eventsNotified[event.id] = struct{}{}
 				eventsNotifiedEarly[event.id] = struct{}{}
@@ -340,7 +340,7 @@ func processNotifications(events []event) {
 		}
 		_, alreadyNotifiedEarly := eventsNotifiedEarly[event.id]
 		if event.notifiable && !alreadyNotifiedEarly && lunchStarting {
-			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, false)
+			notifiedEarly := notifyIfNeeded(event, earlyNotificationTime, true)
 			if notifiedEarly {
 				eventsNotifiedEarly[event.id] = struct{}{}
 			}
@@ -348,24 +348,26 @@ func processNotifications(events []event) {
 	}
 }
 
-func notifyIfNeeded(event *event, notificationTime float64, addMeetingLink bool) bool {
+func notifyIfNeeded(event *event, notificationTime float64, early bool) bool {
 	result := false
 	timeToStart := time.Until(event.start)
 	if timeToStart.Minutes() <= notificationTime {
-		sendNotification(event, timeToStart, addMeetingLink)
+		sendNotification(event, timeToStart, early)
 		result = true
 	}
 
 	return result
 }
 
-func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bool) {
+func sendNotification(event *event, timeToStart time.Duration, early bool) {
 	slog.Debug("Sending notification for '" + event.title + "'. Time to start: " + timeToStart.String())
 	remaining := int(timeToStart.Round(time.Minute).Minutes())
 	notifTitle := "'" + event.title + "' is starting soon"
 	notifBody := strconv.Itoa(remaining) + " minutes to event"
-	if remaining > 10 {
+	icon := ui.ResourceAppIconPng
+	if early {
 		notifTitle = "Early notification for '" + event.title + "'"
+		icon = ui.ResourceEarlyNotificationPng
 	} else if remaining == 1 {
 		notifBody = strconv.Itoa(remaining) + " minute to event"
 	} else if remaining <= 0 {
@@ -374,10 +376,10 @@ func sendNotification(event *event, timeToStart time.Duration, addMeetingLink bo
 	}
 
 	var meetingLink string
-	if addMeetingLink && event.isVirtualMeeting() {
+	if !early && event.isVirtualMeeting() {
 		meetingLink = event.location
 	}
-	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink)
+	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink, icon)
 }
 
 func refreshUI() {
