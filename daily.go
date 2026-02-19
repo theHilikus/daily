@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/theHilikus/daily/internal/notification"
+	"github.com/theHilikus/daily/internal/status"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -42,6 +43,7 @@ var (
 	settingsWindow      fyne.Window
 	eventsNotified      = make(map[string]struct{})
 	eventsNotifiedEarly = make(map[string]struct{})
+	statusUpdated       = make(map[string]struct{})
 
 	currentEventSource EventSource
 	dailyApp           fyne.App
@@ -241,6 +243,7 @@ func tick() {
 		events, err := currentEventSource.getDayEvents(time.Now(), false)
 		if err == nil {
 			processNotifications(events)
+			processStatusUpdates(events)
 		}
 	}
 	refreshUI()
@@ -271,6 +274,7 @@ func refreshEvents() {
 		}
 		lastFullRefresh = time.Now()
 		processNotifications(events)
+		processStatusUpdates(events)
 	}
 }
 
@@ -380,6 +384,38 @@ func sendNotification(event *event, timeToStart time.Duration, early bool) {
 		meetingLink = event.location
 	}
 	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink, icon)
+}
+
+func processStatusUpdates(events []event) {
+	if !dailyApp.Preferences().BoolWithFallback("update-mm-status", false) {
+		return
+	}
+	slog.Debug("Processing status updates")
+
+	var lastCurrentEvent *event
+	for pos := range events {
+		ev := &events[pos]
+
+		_, alreadyUpdated := statusUpdated[ev.id]
+		if ev.response != accepted || alreadyUpdated {
+			continue
+		}
+
+		if ev.isStarted() {
+			if lastCurrentEvent == nil || ev.end.After(lastCurrentEvent.end) {
+				lastCurrentEvent = ev
+			}
+		}
+	}
+
+	if lastCurrentEvent != nil {
+		slog.Info("Updating Mattermost status due to event", "event", lastCurrentEvent.title, "end", lastCurrentEvent.end)
+		serverUrl := dailyApp.Preferences().String("mattermost-server")
+		statusMessage := dailyApp.Preferences().StringWithFallback("event-status-message", "In a meeting")
+		statusEmoji := dailyApp.Preferences().StringWithFallback("event-status-emoji", "calendar")
+		status.UpdateMattermostStatus(serverUrl, lastCurrentEvent.end, statusMessage, statusEmoji)
+		statusUpdated[lastCurrentEvent.id] = struct{}{}
+	}
 }
 
 func refreshUI() {
@@ -589,12 +625,13 @@ func showSettings(dailyApp fyne.App) {
 		settingsWindow = nil
 	})
 
-	settingsWindow.Resize(fyne.NewSize(400, 200))
+	settingsWindow.Resize(fyne.NewSize(500, 400))
+	settingsWindow.CenterOnScreen()
 	calendarIdLabel := widget.NewLabel("Calendar ID:")
 	calendarIdBox := widget.NewEntry()
 	calendarIdBox.Text = "primary"
 	var gCalToken string
-	connectButton := widget.NewButtonWithIcon("Google Calendar", ui.ResourceGoogleCalendarPng, func() {
+	gcalConnectButton := widget.NewButtonWithIcon("Google Calendar", ui.ResourceGoogleCalendarPng, func() {
 		var err error
 		gCalToken, err = executeGoogleOAuthFlow()
 		if err != nil {
@@ -602,8 +639,67 @@ func showSettings(dailyApp fyne.App) {
 			return
 		}
 	})
+	gcalLine := container.NewHBox(gcalConnectButton, calendarIdLabel, container.NewGridWrap(fyne.NewSize(100, calendarIdBox.MinSize().Height), calendarIdBox))
 
-	connectBox := container.NewHBox(connectButton, calendarIdLabel, container.NewGridWrap(fyne.NewSize(100, calendarIdBox.MinSize().Height), calendarIdBox))
+	currentAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
+	if err != nil {
+		slog.Error("Could not retrieve mattermost token", "error", err)
+		currentAuthToken = ""
+	}
+	statusEnable := widget.NewCheck("Update status on events", func(checked bool) {})
+	var mmServerAddress string
+	var mmAuthToken string
+	mmConnectButton := widget.NewButtonWithIcon("Mattermost", ui.ResourceMattermostPng, func() {
+		serverAddressBox := widget.NewEntry()
+		serverAddressBox.SetText(dailyApp.Preferences().String("mattermost-server"))
+		emptyValidator := func(s string) error {
+			if s == "" {
+				return errors.New("Field cannot be empty")
+			}
+			return nil
+		}
+		serverAddressBox.Validator = emptyValidator
+		serverItem := widget.NewFormItem("Server", serverAddressBox)
+		serverItem.HintText = "e.g. example.mattermost.com"
+		passwordBox := widget.NewPasswordEntry()
+		passwordBox.SetText(strings.Repeat("*", len(currentAuthToken)))
+		passwordBox.Validator = emptyValidator
+		passwordItem := widget.NewFormItem("Auth token", passwordBox)
+		passwordItem.HintText = "From client"
+		testButton := widget.NewButton("Test Connection", nil)
+		testButtonItem := widget.NewFormItem("", testButton)
+		testButtonItem.HintText = " "
+		items := []*widget.FormItem{serverItem, passwordItem, testButtonItem}
+		mmForm := dialog.NewForm("Mattermost Config", "Ok", "Cancel", items, func(valid bool) {
+			if valid {
+				mmAuthToken = passwordBox.Text
+				mmServerAddress = serverAddressBox.Text
+				statusEnable.Enable()
+				statusEnable.Checked = true
+				statusEnable.Refresh()
+			}
+		}, settingsWindow)
+		testButton.OnTapped = func() {
+			_, err2 := status.GetCurrentStatus(serverAddressBox.Text)
+			if err2 != nil {
+				testButtonItem.HintText = "Error: " + err2.Error()
+			} else {
+				testButtonItem.HintText = "Connection successful!"
+			}
+			mmForm.Refresh()
+		}
+		mmForm.Resize(fyne.NewSize(400, 300))
+		mmForm.Show()
+	})
+
+	if currentAuthToken == "" {
+		statusEnable.Disable()
+	} else {
+		statusEnable.Checked = dailyApp.Preferences().BoolWithFallback("update-mm-status", false)
+	}
+	mmLine := container.NewHBox(mmConnectButton, statusEnable)
+
+	connectBox := container.NewVBox(gcalLine, mmLine)
 
 	saveButton := widget.NewButton("Save", func() {
 		dailyApp.Preferences().SetString("calendar-id", calendarIdBox.Text)
@@ -617,6 +713,17 @@ func showSettings(dailyApp fyne.App) {
 			refreshEvents()
 			refreshUI()
 		}
+		if mmAuthToken != "" {
+			err := keyring.Set("theHilikus-daily-app", "mattermost-token", mmAuthToken)
+			if err != nil {
+				slog.Error("Could not save mattermost token", "error", err)
+				return
+			}
+		}
+		if mmServerAddress != "" {
+			dailyApp.Preferences().SetString("mattermost-server", mmServerAddress)
+		}
+		dailyApp.Preferences().SetBool("update-mm-status", statusEnable.Checked)
 
 		slog.Info("Preferences saved")
 		settingsWindow.Close()
@@ -631,6 +738,7 @@ func showSettings(dailyApp fyne.App) {
 		widget.NewLabel("Connect to"),
 		connectBox,
 		layout.NewSpacer(),
+		widget.NewSeparator(),
 		versionLabel,
 		container.NewHBox(layout.NewSpacer(), saveButton, cancelButton),
 	)
