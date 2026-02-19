@@ -13,6 +13,8 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+var mmUserId string
+
 func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, eventMessage string, eventEmoji string) {
 	mmAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
 	if err != nil {
@@ -86,6 +88,8 @@ func getCurrentStatus(serverUrl string, authToken string) (*CustomStatus, error)
 		return nil, fmt.Errorf("error parsing response body: %w", err2)
 	}
 
+	mmUserId = user.Id
+
 	if user.Props.CustomStatus == "" {
 		return new(CustomStatus), nil
 	}
@@ -149,6 +153,60 @@ func (s *CustomStatus) send(serverUrl string, authToken string) error {
 	}
 
 	slog.Info("Custom status set successfully")
+	s.setDoNotDisturb(serverUrl, authToken)
 
 	return nil
+}
+
+func (s *CustomStatus) setDoNotDisturb(url string, token string) {
+	expiresAt, err := time.Parse(time.RFC3339, s.ExpiresAt)
+	if err != nil {
+		slog.Error("Error parsing expires_at time", "err", err)
+		return
+	}
+
+	dndUntil := expiresAt.Unix()
+	dndPayload := map[string]any{
+		"user_id":      mmUserId,
+		"status":       "dnd",
+		"dnd_end_time": dndUntil,
+	}
+
+	dndEndpoint := "/api/v4/users/me/status"
+
+	jsonData, err := json.Marshal(dndPayload)
+	if err != nil {
+		slog.Error("Error marshaling DND payload", "err", err)
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPut, url+dndEndpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		slog.Error("Error creating DND request", "err", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Error sending DND request", "err", err)
+		return
+	}
+
+	defer func(body io.ReadCloser) {
+		err := body.Close()
+		if err != nil {
+			slog.Error("Failed to close DND response body", "error", err)
+		}
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		slog.Error("Failed to set DND status", "statusCode", resp.StatusCode, "body", string(body))
+		return
+	}
+
+	slog.Debug("Do Not Disturb status set successfully", "expires_at", s.ExpiresAt)
 }
