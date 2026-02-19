@@ -43,6 +43,7 @@ var (
 	settingsWindow      fyne.Window
 	eventsNotified      = make(map[string]struct{})
 	eventsNotifiedEarly = make(map[string]struct{})
+	statusUpdated       = make(map[string]struct{})
 
 	currentEventSource EventSource
 	dailyApp           fyne.App
@@ -242,6 +243,7 @@ func tick() {
 		events, err := currentEventSource.getDayEvents(time.Now(), false)
 		if err == nil {
 			processNotifications(events)
+			processStatusUpdates(events)
 		}
 	}
 	refreshUI()
@@ -272,6 +274,7 @@ func refreshEvents() {
 		}
 		lastFullRefresh = time.Now()
 		processNotifications(events)
+		processStatusUpdates(events)
 	}
 }
 
@@ -381,6 +384,38 @@ func sendNotification(event *event, timeToStart time.Duration, early bool) {
 		meetingLink = event.location
 	}
 	notification.SendNotification(dailyApp, notifTitle, notifBody, meetingLink, icon)
+}
+
+func processStatusUpdates(events []event) {
+	if !dailyApp.Preferences().BoolWithFallback("update-mm-status", false) {
+		return
+	}
+	slog.Debug("Processing status updates")
+
+	var lastCurrentEvent *event
+	for pos := range events {
+		ev := &events[pos]
+
+		_, alreadyUpdated := statusUpdated[ev.id]
+		if ev.response != accepted || alreadyUpdated {
+			continue
+		}
+
+		if ev.isStarted() {
+			if lastCurrentEvent == nil || ev.end.After(lastCurrentEvent.end) {
+				lastCurrentEvent = ev
+			}
+		}
+	}
+
+	if lastCurrentEvent != nil {
+		slog.Info("Updating Mattermost status due to event", "event", lastCurrentEvent.title, "end", lastCurrentEvent.end)
+		serverUrl := dailyApp.Preferences().String("mattermost-server")
+		statusMessage := dailyApp.Preferences().StringWithFallback("event-status-message", "In a meeting")
+		statusEmoji := dailyApp.Preferences().StringWithFallback("event-status-emoji", "calendar")
+		status.UpdateMattermostStatus(serverUrl, lastCurrentEvent.end, statusMessage, statusEmoji)
+		statusUpdated[lastCurrentEvent.id] = struct{}{}
+	}
 }
 
 func refreshUI() {
