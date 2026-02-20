@@ -57,8 +57,8 @@ func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage 
 		slog.Error("Error retrieving current user availability. Skipping update", "err", err)
 		return
 	}
-	if currentUserStatus.Availability == offline {
-		slog.Info("Mattermost user availability is offline. Skipping update")
+	if currentUserStatus.Availability == offline && currentUserStatus.SetManually {
+		slog.Info("Mattermost user availability is offline set manually. Skipping update")
 		return
 	}
 
