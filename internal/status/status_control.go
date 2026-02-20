@@ -30,7 +30,7 @@ func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, eventMessage s
 	if currentStatus.isSet() {
 		slog.Info("Current custom status is set. Skipping update.")
 	} else {
-		status := CustomStatus{Text: eventMessage, Emoji: eventEmoji, ExpiresAt: eventEnd.Format(time.RFC3339)}
+		status := CustomStatus{Text: eventMessage, Emoji: eventEmoji, ExpiresAt: eventEnd.Truncate(time.Minute)}
 		err := status.send(serverUrl, mmAuthToken)
 		if err != nil {
 			slog.Error("Error setting custom status", "err", err)
@@ -103,9 +103,9 @@ func getCurrentStatus(serverUrl string, authToken string) (*CustomStatus, error)
 }
 
 type CustomStatus struct {
-	Emoji     string `json:"emoji"`
-	Text      string `json:"text"`
-	ExpiresAt string `json:"expires_at"`
+	Emoji     string    `json:"emoji"`
+	Text      string    `json:"text"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type userProfile struct {
@@ -116,7 +116,7 @@ type userProfile struct {
 }
 
 func (s *CustomStatus) isSet() bool {
-	return s.Text != "" || s.Emoji != ""
+	return (s.Text != "" || s.Emoji != "") && (s.ExpiresAt.IsZero() || s.ExpiresAt.After(time.Now()))
 }
 
 func (s *CustomStatus) send(serverUrl string, authToken string) error {
@@ -159,13 +159,7 @@ func (s *CustomStatus) send(serverUrl string, authToken string) error {
 }
 
 func (s *CustomStatus) setDoNotDisturb(url string, token string) {
-	expiresAt, err := time.Parse(time.RFC3339, s.ExpiresAt)
-	if err != nil {
-		slog.Error("Error parsing expires_at time", "err", err)
-		return
-	}
-
-	dndUntil := expiresAt.Unix()
+	dndUntil := s.ExpiresAt.Unix()
 	dndPayload := map[string]any{
 		"user_id":      mmUserId,
 		"status":       "dnd",
