@@ -15,7 +15,20 @@ import (
 
 var mmUserId string
 
-func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, eventMessage string, eventEmoji string) {
+type MattermostStatus struct {
+	Emoji     string    `json:"emoji"`
+	Text      string    `json:"text"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type userProfile struct {
+	Id    string `json:"id"`
+	Props struct {
+		CustomStatus string `json:"customStatus"`
+	} `json:"props"`
+}
+
+func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage string, statusEmoji string) {
 	mmAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
 	if err != nil {
 		slog.Error("Error retrieving mattermost token", "err", err)
@@ -27,19 +40,20 @@ func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, eventMessage s
 		slog.Error("Error retrieving current status. Skipping update", "err", err)
 		return
 	}
-	if currentStatus.isSet() {
-		slog.Info("Current custom status is set. Skipping update.")
-	} else {
-		status := CustomStatus{Text: eventMessage, Emoji: eventEmoji, ExpiresAt: eventEnd.Truncate(time.Minute)}
-		err := status.send(serverUrl, mmAuthToken)
+	if !currentStatus.isSet() {
+		status := MattermostStatus{Text: statusMessage, Emoji: statusEmoji, ExpiresAt: eventEnd.Truncate(time.Minute)}
+		err := status.publish(serverUrl, mmAuthToken)
 		if err != nil {
-			slog.Error("Error setting custom status", "err", err)
+			slog.Error("Error setting mattermost status", "err", err)
 			return
 		}
+		slog.Info("Mattermost status updated successfully")
+	} else {
+		slog.Info("Mattermost status is already set. Skipping update")
 	}
 }
 
-func GetCurrentStatus(serverUrl string) (*CustomStatus, error) {
+func GetCurrentStatus(serverUrl string) (*MattermostStatus, error) {
 	mmAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving mattermost auth token: %w", err)
@@ -48,7 +62,7 @@ func GetCurrentStatus(serverUrl string) (*CustomStatus, error) {
 	return getCurrentStatus(serverUrl, mmAuthToken)
 }
 
-func getCurrentStatus(serverUrl string, authToken string) (*CustomStatus, error) {
+func getCurrentStatus(serverUrl string, authToken string) (*MattermostStatus, error) {
 	slog.Debug("Getting current status from mattermost", "server", serverUrl)
 
 	if !strings.HasPrefix(serverUrl, "https://") {
@@ -91,10 +105,10 @@ func getCurrentStatus(serverUrl string, authToken string) (*CustomStatus, error)
 	mmUserId = user.Id
 
 	if user.Props.CustomStatus == "" {
-		return new(CustomStatus), nil
+		return new(MattermostStatus), nil
 	}
 
-	var result CustomStatus
+	var result MattermostStatus
 	if err := json.Unmarshal([]byte(user.Props.CustomStatus), &result); err != nil {
 		return nil, fmt.Errorf("error parsing custom status: %w", err)
 	}
@@ -102,27 +116,30 @@ func getCurrentStatus(serverUrl string, authToken string) (*CustomStatus, error)
 	return &result, nil
 }
 
-type CustomStatus struct {
-	Emoji     string    `json:"emoji"`
-	Text      string    `json:"text"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-type userProfile struct {
-	Id    string `json:"id"`
-	Props struct {
-		CustomStatus string `json:"customStatus"`
-	} `json:"props"`
-}
-
-func (s *CustomStatus) isSet() bool {
+func (s *MattermostStatus) isSet() bool {
 	return (s.Text != "" || s.Emoji != "") && (s.ExpiresAt.IsZero() || s.ExpiresAt.After(time.Now()))
 }
 
-func (s *CustomStatus) send(serverUrl string, authToken string) error {
+func (s *MattermostStatus) publish(serverUrl string, authToken string) error {
 	if !strings.HasPrefix(serverUrl, "https://") {
 		serverUrl = "https://" + serverUrl
 	}
+	err := s.sendCustomStatus(serverUrl, authToken)
+	if err != nil {
+		return err
+	}
+	slog.Debug("Custom status set successfully", "expiry", s.ExpiresAt)
+
+	err = s.sendDoNotDisturbStatus(serverUrl, authToken)
+	if err != nil {
+		return err
+	}
+	slog.Debug("Do Not Disturb status set successfully", "expiry", s.ExpiresAt)
+
+	return nil
+}
+
+func (s *MattermostStatus) sendCustomStatus(serverUrl string, authToken string) error {
 	statusEndpoint := "/api/v4/users/me/status/custom"
 	jsonData, err := json.Marshal(s)
 	if err != nil {
@@ -152,13 +169,10 @@ func (s *CustomStatus) send(serverUrl string, authToken string) error {
 		return fmt.Errorf("failed to set custom status. statusCode=%d, body=%s", resp.StatusCode, string(body))
 	}
 
-	slog.Info("Custom status set successfully")
-	s.setDoNotDisturb(serverUrl, authToken)
-
 	return nil
 }
 
-func (s *CustomStatus) setDoNotDisturb(url string, token string) {
+func (s *MattermostStatus) sendDoNotDisturbStatus(url string, token string) error {
 	dndUntil := s.ExpiresAt.Unix()
 	dndPayload := map[string]any{
 		"user_id":      mmUserId,
@@ -170,14 +184,12 @@ func (s *CustomStatus) setDoNotDisturb(url string, token string) {
 
 	jsonData, err := json.Marshal(dndPayload)
 	if err != nil {
-		slog.Error("Error marshaling DND payload", "err", err)
-		return
+		return fmt.Errorf("error marshaling DND payload: %w", err)
 	}
 
 	req, err := http.NewRequest(http.MethodPut, url+dndEndpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
-		slog.Error("Error creating DND request", "err", err)
-		return
+		return fmt.Errorf("error creating DND request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -185,8 +197,7 @@ func (s *CustomStatus) setDoNotDisturb(url string, token string) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		slog.Error("Error sending DND request", "err", err)
-		return
+		return fmt.Errorf("error sending DND request: %w", err)
 	}
 
 	defer func(body io.ReadCloser) {
@@ -198,9 +209,8 @@ func (s *CustomStatus) setDoNotDisturb(url string, token string) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		slog.Error("Failed to set DND status", "statusCode", resp.StatusCode, "body", string(body))
-		return
+		return fmt.Errorf("failed to set DND status. statusCode=%d, body=%s", resp.StatusCode, string(body))
 	}
 
-	slog.Debug("Do Not Disturb status set successfully", "expires_at", s.ExpiresAt)
+	return nil
 }
