@@ -134,11 +134,7 @@ func getUserAvailability(serverUrl string, authToken string) (*userAvailability,
 	return &availability, nil
 }
 
-func GetCurrentStatus(serverUrl string) (*MattermostStatus, error) {
-	mmAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving mattermost auth token: %w", err)
-	}
+func GetCurrentStatus(serverUrl string, mmAuthToken string) (*MattermostStatus, error) {
 	if !strings.HasPrefix(serverUrl, "https://") {
 		serverUrl = "https://" + serverUrl
 	}
