@@ -680,7 +680,7 @@ func showSettings(dailyApp fyne.App) {
 			}
 		}, settingsWindow)
 		testButton.OnTapped = func() {
-			_, err2 := status.GetCurrentStatus(serverAddressBox.Text)
+			_, err2 := status.GetCurrentStatus(serverAddressBox.Text, passwordBox.Text)
 			if err2 != nil {
 				testButtonItem.HintText = "Error: " + err2.Error()
 			} else {

@@ -57,8 +57,8 @@ func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage 
 		slog.Error("Error retrieving current user availability. Skipping update", "err", err)
 		return
 	}
-	if currentUserStatus.Availability == offline {
-		slog.Info("Mattermost user availability is offline. Skipping update")
+	if currentUserStatus.Availability == offline && currentUserStatus.SetManually {
+		slog.Info("Mattermost user availability is offline set manually. Skipping update")
 		return
 	}
 
@@ -134,11 +134,7 @@ func getUserAvailability(serverUrl string, authToken string) (*userAvailability,
 	return &availability, nil
 }
 
-func GetCurrentStatus(serverUrl string) (*MattermostStatus, error) {
-	mmAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving mattermost auth token: %w", err)
-	}
+func GetCurrentStatus(serverUrl string, mmAuthToken string) (*MattermostStatus, error) {
 	if !strings.HasPrefix(serverUrl, "https://") {
 		serverUrl = "https://" + serverUrl
 	}
