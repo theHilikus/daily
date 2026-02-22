@@ -13,9 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/theHilikus/daily/internal/notification"
-	"github.com/theHilikus/daily/internal/status"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -27,6 +24,8 @@ import (
 	"fyne.io/systray"
 	md "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/robfig/cron/v3"
+	"github.com/theHilikus/daily/internal/notification"
+	"github.com/theHilikus/daily/internal/status"
 	"github.com/theHilikus/daily/internal/ui"
 	"github.com/zalando/go-keyring"
 	"google.golang.org/api/googleapi"
@@ -631,13 +630,30 @@ func showSettings(dailyApp fyne.App) {
 	calendarIdBox := widget.NewEntry()
 	calendarIdBox.Text = "primary"
 	var gCalToken string
+	var cancelOAuthFlowFunc func()
 	gcalConnectButton := widget.NewButtonWithIcon("Google Calendar", ui.ResourceGoogleCalendarPng, func() {
-		var err error
-		gCalToken, err = executeGoogleOAuthFlow()
+		cancelOAuthFlowFunc, resultChan, err := executeCancellableGoogleOAuthFlow()
 		if err != nil {
 			dialog.ShowError(err, settingsWindow)
 			return
 		}
+
+		go func() {
+			select {
+			case result, ok := <-resultChan:
+				if !ok {
+					slog.Info("Authentication failed")
+				} else if result.Err != nil {
+					slog.Error("Authentication failed.", "error", result.Err)
+				} else {
+					slog.Info("Authentication was successful")
+					gCalToken = result.Token
+				}
+			case <-time.After(1 * time.Minute):
+				slog.Warn("Google Calendar OAuth flow timed out. Cancelling...")
+				cancelOAuthFlowFunc()
+			}
+		}()
 	})
 	gcalLine := container.NewHBox(gcalConnectButton, calendarIdLabel, container.NewGridWrap(fyne.NewSize(100, calendarIdBox.MinSize().Height), calendarIdBox))
 
@@ -730,6 +746,9 @@ func showSettings(dailyApp fyne.App) {
 	})
 
 	cancelButton := widget.NewButton("Cancel", func() {
+		if cancelOAuthFlowFunc != nil {
+			cancelOAuthFlowFunc()
+		}
 		settingsWindow.Close()
 	})
 

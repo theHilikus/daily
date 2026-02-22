@@ -28,126 +28,119 @@ import (
 //go:embed secrets/client.json
 var clientSecret []byte
 
-// oauthHandler handles the OAuth2 callback.
-type oauthHandler struct {
-	state        string
-	codeVerifier string
-	config       *oauth2.Config
-	server       *http.Server
-	tokenResult  *string
+type oAuthResult struct {
+	Token string
+	Err   error
 }
 
-// ServeHTTP handles the callback request, exchanges the code for a token,
-// and shuts down the server.
-func (h *oauthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		go func() {
-			if err := h.server.Shutdown(context.Background()); err != nil {
-				slog.Error("Server shutdown error", "error", err)
-			}
-		}()
-	}()
-
-	if r.URL.Query().Get("state") != h.state {
-		slog.Error("State in callback didn't match original")
-		http.Error(w, "Invalid state", http.StatusBadRequest)
-		return
-	}
-
-	code := r.URL.Query().Get("code")
-	token, err := h.config.Exchange(context.Background(), code, oauth2.SetAuthURLParam("code_verifier", h.codeVerifier))
-	if err != nil {
-		http.Error(w, "Failed to exchange token", http.StatusInternalServerError)
-		slog.Error("Token exchange failed", "error", err, "scopes", h.config.Scopes, "redirect_uri", h.config.RedirectURL)
-		return
-	}
-
-	slog.Info("Authentication successful!")
-	tokenJSON, err := json.Marshal(token)
-	if err != nil {
-		http.Error(w, "Failed to marshal token", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html")
-	_, err = w.Write([]byte("<html><body><h1>Authentication Complete</h1>You can close this window and go back to the app</body></html>"))
-	if err != nil {
-		slog.Error("Failed to write success response", "error", err)
-		return
-	}
-
-	*h.tokenResult = string(tokenJSON)
-}
-
-func executeGoogleOAuthFlow() (string, error) {
+func executeCancellableGoogleOAuthFlow() (context.CancelFunc, <-chan oAuthResult, error) {
 	slog.Info("Starting PKCE OAuth flow for Google Calendar")
 
 	config, err := createOAuthConfig()
 	if err != nil {
-		slog.Error("Failed to create config", "error", err)
-		return "", err
+		return nil, nil, fmt.Errorf("failed to create config: %w", err)
 	}
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
-		slog.Error("Failed to create listener", "error", err)
-		return "", err
+		return nil, nil, fmt.Errorf("failed to create listener: %w", err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 
 	config.RedirectURL = fmt.Sprintf("http://localhost:%d/callback", port)
 	state, err := generateRandomURLSafeString(16)
 	if err != nil {
-		slog.Error("Failed to generate state", "error", err)
-		return "", err
+		return nil, nil, fmt.Errorf("failed to generate state: %w", err)
 	}
 	codeVerifier, err := generateRandomURLSafeString(32)
 	if err != nil {
-		slog.Error("Failed to generate code verifier: %v", "error", err)
-		return "", err
+		return nil, nil, fmt.Errorf("failed to generate code verifier: %w", err)
 	}
 	codeChallenge := oauth2.S256ChallengeOption(codeVerifier)
 	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline, codeChallenge)
 	parsedURL, err := url.Parse(authURL)
 	if err != nil {
-		slog.Error("Failed to parse OAuth URL", "error", err)
-		return "", err
+		return nil, nil, fmt.Errorf("failed to parse OAuth URL: %w", err)
 	}
 	// Open the URL in the user's browser
 	err = dailyApp.OpenURL(parsedURL)
 	if err != nil {
-		slog.Error("Failed to open OAuth URL", "error", err)
-		return "", err
+		return nil, nil, fmt.Errorf("failed to open OAuth URL: %w", err)
 	}
 
-	var tokenResult string
-	done := make(chan bool)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Buffered channel ensures the sender (HTTP handler) doesn't block.
+	resultChan := make(chan oAuthResult, 1)
 
 	mux := http.NewServeMux()
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: mux,
 	}
-	handler := &oauthHandler{
-		state:        state,
-		codeVerifier: codeVerifier,
-		config:       config,
-		server:       server,
-		tokenResult:  &tokenResult,
-	}
-	mux.Handle("/callback", handler)
+
+	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		slog.Debug("Received OAuth callback")
+
+		if r.URL.Query().Get("state") != state {
+			slog.Error("State in callback didn't match original")
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			cancel()
+			return
+		}
+
+		code := r.URL.Query().Get("code")
+		token, err := config.Exchange(context.Background(), code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
+		if err != nil {
+			slog.Error("Token exchange failed", "error", err, "scopes", config.Scopes, "redirect_uri", config.RedirectURL)
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			cancel()
+			return
+		}
+
+		tokenJSON, err := json.Marshal(token)
+		if err != nil {
+			slog.Error("Failed to marshal token", "error", err)
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			cancel()
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html")
+		_, err = w.Write([]byte("<html><body><h1>Authentication Complete</h1>You can close this window and go back to the app</body></html>"))
+		if err != nil {
+			slog.Error("Failed to write success response", "error", err)
+			cancel()
+			return
+		}
+
+		resultChan <- oAuthResult{Token: string(tokenJSON)}
+
+		cancel()
+	})
 
 	go func() {
-		if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("Server error", "error", err)
+		<-ctx.Done()
+		shutdownCtx, timeoutCancel := context.WithTimeout(context.Background(), 5*time.Second) //to deal with zombie connections
+		defer timeoutCancel()
+		err := server.Shutdown(shutdownCtx)
+		if err != nil {
+			slog.Error("Server shutdown error", "error", err)
+		} else {
+			slog.Debug("Server shut down successfully")
 		}
-		done <- true
+
+		close(resultChan)
 	}()
 
-	slog.Info("Waiting for authentication to complete...")
-	<-done // Wait for the callback to complete
-	slog.Info("Authentication completed")
+	go func() {
+		slog.Debug("Starting HTTP server", "port", port)
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			resultChan <- oAuthResult{Err: err}
+			cancel()
+		}
+	}()
 
-	return tokenResult, nil
+	return cancel, resultChan, nil
 }
 
 func createOAuthConfig() (*oauth2.Config, error) {
