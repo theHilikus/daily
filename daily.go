@@ -267,10 +267,7 @@ func refreshEvents() {
 		}
 		handleEventRetrievalError(err)
 	} else {
-		if !lastErrorButton.Hidden {
-			slog.Info("Clearing last user error")
-			lastErrorButton.Hidden = true
-		}
+		clearUserError()
 		lastFullRefresh = time.Now()
 		processNotifications(events)
 		processStatusUpdates(events)
@@ -321,6 +318,13 @@ func reportUserError(errorMessage string) {
 	lastErrorButton.Hidden = false
 	lastErrorButton.OnTapped = func() {
 		dialog.ShowError(errors.New(errorMessage), dailyApp.Driver().AllWindows()[0])
+	}
+}
+
+func clearUserError() {
+	if !lastErrorButton.Hidden {
+		slog.Info("Clearing last user error")
+		lastErrorButton.Hidden = true
 	}
 }
 
@@ -412,7 +416,12 @@ func processStatusUpdates(events []event) {
 		serverUrl := dailyApp.Preferences().String("mattermost-server")
 		statusMessage := dailyApp.Preferences().StringWithFallback("event-status-message", "In a meeting")
 		statusEmoji := dailyApp.Preferences().StringWithFallback("event-status-emoji", "calendar")
-		status.UpdateMattermostStatus(serverUrl, lastCurrentEvent.end, statusMessage, statusEmoji)
+		err := status.UpdateMattermostStatus(serverUrl, lastCurrentEvent.end, statusMessage, statusEmoji)
+		if err != nil {
+			reportUserError("Could not update Mattermost status: " + err.Error())
+		} else {
+			clearUserError()
+		}
 		statusUpdated[lastCurrentEvent.id] = struct{}{}
 	}
 }

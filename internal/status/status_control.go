@@ -41,11 +41,10 @@ type userAvailability struct {
 	SetManually  bool             `json:"manual"`
 }
 
-func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage string, statusEmoji string) {
+func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage string, statusEmoji string) error {
 	mmAuthToken, err := keyring.Get("theHilikus-daily-app", "mattermost-token")
 	if err != nil {
-		slog.Error("Error retrieving mattermost token", "err", err)
-		return
+		return fmt.Errorf("error retrieving mattermost token: %w", err)
 	}
 
 	if !strings.HasPrefix(serverUrl, "https://") {
@@ -54,33 +53,29 @@ func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage 
 
 	currentUserStatus, err := getUserAvailability(serverUrl, mmAuthToken)
 	if err != nil {
-		slog.Error("Error retrieving current user availability. Skipping update", "err", err)
-		return
+		return fmt.Errorf("error retrieving current user availability: %w", err)
 	}
 	if currentUserStatus.Availability == offline && currentUserStatus.SetManually {
 		slog.Info("Mattermost user availability is offline set manually. Skipping update")
-		return
+		return nil
 	}
 
 	currentCustomStatus, err := getCurrentCustomStatus(serverUrl, mmAuthToken)
 	if err != nil {
-		slog.Error("Error retrieving current custom status. Skipping update", "err", err)
-		return
+		return fmt.Errorf("error retrieving current custom status: %w", err)
 	}
 	if !currentCustomStatus.isSet() {
 		status := MattermostStatus{Text: statusMessage, Emoji: statusEmoji, ExpiresAt: eventEnd.Truncate(time.Minute)}
 		err := status.sendCustomStatus(serverUrl, mmAuthToken)
 		if err != nil {
-			slog.Error("Error setting custom mattermost status", "err", err)
-			return
+			return fmt.Errorf("error setting custom mattermost status: %w", err)
 		}
 		slog.Debug("Custom status set successfully")
 
 		if !currentUserStatus.SetManually {
 			err = status.sendAvailability(serverUrl, mmAuthToken)
 			if err != nil {
-				slog.Error("Error setting mattermost availability", "err", err)
-				return
+				return fmt.Errorf("error setting mattermost availability: %w", err)
 			}
 			slog.Debug("Do Not Disturb status set successfully")
 		} else {
@@ -91,6 +86,8 @@ func UpdateMattermostStatus(serverUrl string, eventEnd time.Time, statusMessage 
 	} else {
 		slog.Info("Mattermost custom status is already set until " + currentCustomStatus.ExpiresAt.String() + ". Skipping update")
 	}
+
+	return nil
 }
 
 func getUserAvailability(serverUrl string, authToken string) (*userAvailability, error) {
