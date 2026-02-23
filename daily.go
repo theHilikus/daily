@@ -641,7 +641,11 @@ func showSettings(dailyApp fyne.App) {
 	var gCalToken string
 	var cancelOAuthFlowFunc func()
 	gcalConnectButton := widget.NewButtonWithIcon("Google Calendar", ui.ResourceGoogleCalendarPng, func() {
-		cancelOAuthFlowFunc, resultChan, err := executeCancellableGoogleOAuthFlow()
+		var (
+			resultChan <-chan oAuthResult
+			err        error
+		)
+		cancelOAuthFlowFunc, resultChan, err = executeCancellableGoogleOAuthFlow()
 		if err != nil {
 			dialog.ShowError(err, settingsWindow)
 			return
