@@ -9,6 +9,8 @@ jobs:
   # Read the TOML file first and provide its info to other jobs
   prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       app_name: ${{ steps.get_info.outputs.name }}
       app_version: ${{ steps.get_info.outputs.version }}
@@ -46,6 +48,8 @@ jobs:
   build:
     # Use a build matrix to build on all three platforms
     needs: prepare
+    permissions:
+      contents: read
     strategy:
       matrix:
         goos: [ linux, windows, darwin ]
